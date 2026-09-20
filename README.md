@@ -34,15 +34,6 @@ real bank feed would be.
 **Out of scope.** Foreign currency, chargebacks, credit notes, deposits, ERP or bank connectors,
 real authentication, encryption at rest, and signed audit logs.
 
-## Why I built it
-
-While building reconciliation automation at Kyron Medical, the difficult question was not whether
-a bot could settle another row. It was when the bot had earned permission to handle the next
-similar row without a person. Maximor’s Learns → Runs → Escalates → Improves framing made that
-question concrete, so I built this as a self-assigned take-home: diagnose repeated failures, test a
-specific correction, bind human approval to the exact data snapshot, and measure what happens on
-the next batch.
-
 ## The workflow
 
 1. **Run.** A fixed policy evaluates receipts in the order R5 group → R1 exact → R2 amount/date →
