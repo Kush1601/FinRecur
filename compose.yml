@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    # Demo database: durability off. Docker Desktop's volume fsync is slow enough on macOS
+    # that a 1,400-receipt run took minutes. Never copy these flags to a real deployment.
+    command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+    environment:
+      POSTGRES_USER: finrecur
+      POSTGRES_PASSWORD: finrecur
+      POSTGRES_DB: finrecur
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finrecur"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  pgdata:

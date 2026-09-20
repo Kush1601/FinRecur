@@ -1,0 +1,15 @@
+{
+  "cause": "Overpayment received where payment amount exceeds matched receivable amounts.",
+  "confidence": 0.95,
+  "evidence_cited": [
+    "reason_code: overpayment",
+    "overpayment_matches_multi_receivable: true",
+    "shortfall_pct values: 89.42, 99.16, 144.81"
+  ],
+  "member_ids_confirmed": [
+    "50cbf8fb-5d08-5a5e-bca6-561a92f76f3d",
+    "a1fa2c35-3a35-5421-b428-e7f70864fd1f",
+    "ff11ef53-ca54-5e7b-8ed6-07815b38b3e8"
+  ],
+  "member_ids_dropped": []
+}

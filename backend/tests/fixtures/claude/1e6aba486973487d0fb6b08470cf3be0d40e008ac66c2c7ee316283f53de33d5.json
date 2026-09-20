@@ -1,0 +1,27 @@
+{
+  "cause": "Receipt reference number has edit distance of 1\u20132 characters from the receivable source ID, causing reconciliation mismatch despite matching receivable.",
+  "confidence": 0.95,
+  "evidence_cited": [
+    "reference_status: edit_distance_1_or_2_from_some_receivable_source_id",
+    "nearest_receivable_edit_distance: 1 or 2",
+    "receivable_status: settled",
+    "shortfall_pct: null"
+  ],
+  "member_ids_confirmed": [
+    "208edec4-87d0-5468-8437-1c48960c4f40",
+    "2a7768ea-ed10-5b6f-9c93-54f56d475f6f",
+    "429c0b9e-4069-5c81-9549-ef7dd7da449f",
+    "46103754-534d-588e-8080-9971ac58eb8d",
+    "4c583f2a-c6a3-5bee-b4cb-b49110b6611f",
+    "519f5252-80f9-5d6f-a4c0-fb240730940e",
+    "5d4de3ae-f4bd-505e-a295-b11fd5044134",
+    "7497be50-4988-5d14-a564-c7995ca978d2",
+    "859ed353-b086-5755-a4e6-d307a7f63bb6",
+    "8d2deee8-b2b3-5d0e-bf83-71eeb784932e",
+    "97edba50-4930-563c-a884-6bf572cd95fc",
+    "9c3d2509-1d15-5f33-bf01-19d108d64fd6",
+    "bcd3298a-4b55-5791-94ef-e54025ff3cf7",
+    "e81788ea-80ce-5e14-ba04-56eed6ed9cb8"
+  ],
+  "member_ids_dropped": []
+}

@@ -1,0 +1,8 @@
+{
+  "alternative": null,
+  "fix_type": "manual_review",
+  "params": {
+    "reason": "Multiple new counterparties with empty references and no matching receivables. No candidate_canonical_counterparties provided for any member, nearest_receivable_source_ids are all null, and no clear duplicate patterns by amount/date. Cannot apply F1 (no candidates), F2 (no reference to repair), F3 (different fingerprints, different amounts), F4 (no receivables to split), or F5 (no shortfall metrics). Requires manual investigation to identify whether these are genuine new counterparties, data entry errors in counterparty normalization, or system data quality issues."
+  },
+  "summary": "Manual review required. All 8 receipts lack matching receivables, have empty references, and belong to newly-discovered counterparties with no provided candidate matches or reference repair targets. The pattern suggests either missing master data (no open receivables created for these counterparties yet), counterparty matching issues, or data integrity gaps that cannot be resolved through automated fixes."
+}

@@ -1,0 +1,48 @@
+{
+  "alternative": null,
+  "fix_type": "split_receipt",
+  "params": {
+    "splits": [
+      {
+        "allocations": [
+          {
+            "amount": 9943,
+            "receivable_id": "7970d321-e7c6-5038-9ee0-f0e891d3f520"
+          },
+          {
+            "amount": 11119,
+            "receivable_id": "d053df2e-e6f0-5433-a8b4-08b8d57e400e"
+          }
+        ],
+        "receipt_id": "50cbf8fb-5d08-5a5e-bca6-561a92f76f3d"
+      },
+      {
+        "allocations": [
+          {
+            "amount": 21778,
+            "receivable_id": "fc4b023c-16ac-507f-b7a8-768239462224"
+          },
+          {
+            "amount": 21963,
+            "receivable_id": "e7c928b6-8009-5cf3-a66d-96063a58ab02"
+          }
+        ],
+        "receipt_id": "a1fa2c35-3a35-5421-b428-e7f70864fd1f"
+      },
+      {
+        "allocations": [
+          {
+            "amount": 11760,
+            "receivable_id": "72af98ca-d186-57fc-9bbf-a2a04fae97b5"
+          },
+          {
+            "amount": 8121,
+            "receivable_id": "4942fa4a-f5bf-5e0d-ab31-64d086e40cc7"
+          }
+        ],
+        "receipt_id": "ff11ef53-ca54-5e7b-8ed6-07815b38b3e8"
+      }
+    ]
+  },
+  "summary": "Split each overpayment receipt across the two matching open receivables from the candidate set. All three receipts have overpayment_matches_multi_receivable=true with exact candidate sets that sum to the receipt amounts (9943+11119=21062; 21778+21963=43741; 11760+8121=19881)."
+}

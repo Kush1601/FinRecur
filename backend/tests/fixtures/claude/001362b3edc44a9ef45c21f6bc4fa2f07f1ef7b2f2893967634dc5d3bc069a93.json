@@ -1,0 +1,18 @@
+{
+  "cause": "Credit card payment short by ~3.35% (shortfall equivalent to shipping cost).",
+  "confidence": 0.95,
+  "evidence_cited": [
+    "payment_type: credit_card",
+    "shortfall_pct: 3.21-3.49% (average 3.35%)",
+    "shortfall_eq_shipping: true"
+  ],
+  "member_ids_confirmed": [
+    "0882fb16-899b-5285-894a-5e445874b869",
+    "13cdb900-b73d-5dde-bc83-fd7b2b710971",
+    "4593fe5c-dd2b-52cc-8ca2-7e3ed7ad4275",
+    "512578d3-91d7-5170-bf31-df5527ce7bef",
+    "6b514838-6738-5216-a81a-49864b36de70",
+    "a27092ce-0c56-5d50-a70e-8c8209c2f2fe"
+  ],
+  "member_ids_dropped": []
+}

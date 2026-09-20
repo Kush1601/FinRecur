@@ -1,0 +1,182 @@
+{
+  "seed": 1601,
+  "note": "Never read by the app at runtime. Read only by scripts/seed.py and scripts/eval.py. `expected` holds the spec's target numbers (3.10); step 6 (Milestone 1, out of scope here) records actuals against the real seeded slice.",
+  "faults": [
+    {
+      "id": "A",
+      "description": "Repeat customer's receipts arrive under a brand-new counterparty variant with a blank reference; no rule can match (no ref for R1/R5, wrong customer for R2).",
+      "kind": "unmatched_counterparty_variant",
+      "parameters": {
+        "count": 18,
+        "seed": 1601
+      },
+      "expected": {
+        "reason_code": "no_match",
+        "rows": 18,
+        "fix": "F1_add_counterparty_alias",
+        "observed": {
+          "rows": 5,
+          "by_outcome": {
+            "escalated:no_match": 5
+          }
+        },
+        "observed_at": "2026-09-20T10:59:14.069869+00:00"
+      }
+    },
+    {
+      "id": "B",
+      "description": "One character dropped or swapped in the order-id reference on a batch of receipts.",
+      "kind": "reference_corruption",
+      "parameters": {
+        "count": 14,
+        "seed": 1601
+      },
+      "expected": {
+        "reason_code": "no_match_or_multiple_candidates",
+        "rows": 14,
+        "fix": "F2_repair_reference",
+        "note": "some rescued by R2 amount+date, some stay open \u2014 recorded exactly at Milestone 1",
+        "observed": {
+          "rows": 14,
+          "by_outcome": {
+            "matched:R2": 14
+          }
+        },
+        "observed_at": "2026-09-20T10:59:14.069869+00:00"
+      }
+    },
+    {
+      "id": "C",
+      "description": "Re-import duplicates a batch of receipts verbatim (same amount/date/reference, new id).",
+      "kind": "duplicate_import",
+      "parameters": {
+        "count": 9,
+        "seed": 1601
+      },
+      "expected": {
+        "reason_code": "suspected_duplicate",
+        "rows": 9,
+        "fix": "F3_mark_duplicate",
+        "observed": {
+          "rows": 9,
+          "by_outcome": {
+            "escalated:suspected_duplicate": 9
+          }
+        },
+        "observed_at": "2026-09-20T10:59:14.069869+00:00"
+      }
+    },
+    {
+      "id": "D",
+      "description": "One seller's receipts run short by 3.1-3.5% of total, each within the order's own shipping cost -- just outside the R4 2.9% tolerance.",
+      "kind": "freight_adjacent_shortfall",
+      "parameters": {
+        "count": 6,
+        "pct_range": [
+          3.1,
+          3.5
+        ],
+        "seed": 1601
+      },
+      "expected": {
+        "reason_code": "short_pay",
+        "rows": 6,
+        "fix": "F6_amend_policy_R4_2.9_to_3.6",
+        "note": "dry run over history must expose >=2 real or planted (D2) rows the widened bound would wrongly absorb",
+        "observed": {
+          "rows": 6,
+          "by_outcome": {
+            "escalated:short_pay": 6
+          }
+        },
+        "observed_at": "2026-09-20T10:59:14.069869+00:00"
+      }
+    },
+    {
+      "id": "D2",
+      "description": "Planted because Milestone 1 found fewer than 2 real rows a widened R4 bound (2.9 -> 3.6%) would wrongly absorb. Shortfall in the same (2.9%, 3.6%] band as D, on orders D didn't touch -- meant to read as a non-freight dispute a naive widening would still absorb. Not sourced from an actual line-item price: in this slice the smallest single-item share of an order total is ~6%, above the band entirely, so no real item price could ever land there.",
+      "kind": "planted_widening_side_effect",
+      "parameters": {
+        "count": 2,
+        "seed": 1601
+      },
+      "expected": {
+        "reason_code": "short_pay",
+        "rows": 2,
+        "note": "escalates under the current 2.9% R4 bound; a naive 2.9->3.6% widening would wrongly absorb these",
+        "observed": {
+          "rows": 2,
+          "by_outcome": {
+            "escalated:short_pay": 2
+          }
+        },
+        "observed_at": "2026-09-20T10:59:14.069869+00:00"
+      }
+    },
+    {
+      "id": "E",
+      "description": "Processor fee nets card receipts by exactly 2.5%; by construction some escalate (fee > shipping and > R$5) and some are silently absorbed by R3/R4.",
+      "kind": "processor_fee",
+      "parameters": {
+        "count": 11,
+        "seed": 1601
+      },
+      "expected": {
+        "reason_code": "mixed_short_pay_and_absorbed",
+        "rows": 11,
+        "escalated_rows": 4,
+        "absorbed_rows": 7,
+        "fix": "F5_record_fee_deduction",
+        "observed": {
+          "rows": 11,
+          "by_outcome": {
+            "escalated:short_pay": 4,
+            "absorbed:tolerance": 2,
+            "absorbed:short_pay": 5
+          }
+        },
+        "observed_at": "2026-09-20T10:59:14.069869+00:00"
+      }
+    },
+    {
+      "id": "F",
+      "description": "One bank transfer actually pays 2-3 open orders of the same customer, merged into a single receipt.",
+      "kind": "merged_transfer",
+      "parameters": {
+        "count": 3,
+        "seed": 1601
+      },
+      "expected": {
+        "reason_code": "overpayment_or_no_match",
+        "rows": 3,
+        "fix": "F4_split_receipt",
+        "observed": {
+          "rows": 3,
+          "by_outcome": {
+            "escalated:overpayment": 3
+          }
+        },
+        "observed_at": "2026-09-20T10:59:14.069869+00:00"
+      }
+    },
+    {
+      "id": "G",
+      "description": "Last instalment row is missing for 5 multi-row orders; the missing rows land as day-2 data.",
+      "kind": "pending_instalment",
+      "parameters": {
+        "count": 5,
+        "seed": 1601
+      },
+      "expected": {
+        "reason_code": "partial_payment_pending",
+        "rows": 5,
+        "fix": "F6_amend_policy_R5_grace_days_7_or_F7",
+        "observed": {
+          "rows": 0,
+          "by_outcome": {}
+        },
+        "observed_at": "2026-09-20T10:59:14.069869+00:00"
+      }
+    }
+  ]
+}

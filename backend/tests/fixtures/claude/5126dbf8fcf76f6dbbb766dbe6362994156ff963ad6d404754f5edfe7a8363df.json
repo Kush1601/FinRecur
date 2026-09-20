@@ -1,0 +1,12 @@
+{
+  "alternative": null,
+  "fix_type": "amend_policy",
+  "params": {
+    "after": 3,
+    "before": 1,
+    "justification": "All six credit card payment shortfalls are in the 1\u20133 centavo range and marked as shipping-equivalent. Current tolerance of 1 centavo is too tight; raising to 3 centavos will absorb these small rounding gaps without requiring shipping or fee adjustments.",
+    "key": "tolerance_centavos",
+    "rule_id": "R7"
+  },
+  "summary": "Raise R7.tolerance_centavos from 1 to 3 to absorb the small rounding gaps (all shortfalls are 1\u20133 centavos) seen across the credit card payments in this group."
+}

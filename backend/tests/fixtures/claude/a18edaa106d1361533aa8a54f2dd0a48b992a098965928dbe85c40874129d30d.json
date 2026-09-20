@@ -1,0 +1,15 @@
+{
+  "alternative": {
+    "fix_type": "manual_review",
+    "params": {
+      "reason": "Five receipts with empty references and no matching receivables in the system; consider whether this represents a genuine new customer requiring manual data entry for open receivables, or a counterparty that should be aliased."
+    },
+    "summary": "Flag for manual review if the counterparty-to-receivable relationship requires additional validation or if open receivables for this customer need to be created in the system."
+  },
+  "fix_type": "add_counterparty_alias",
+  "params": {
+    "alias_counterparty_id": "6f9c24b6-33da-5118-8740-6d4e80858b72",
+    "canonical_counterparty_id": "ac86d3b5-4cab-5fa8-81c4-dc6cae0f2d16"
+  },
+  "summary": "The counterparty 'acme holdings ltda' (6f9c24b6-33da-5118-8740-6d4e80858b72) is new to the system but matches 5 receipts from an existing canonical counterparty 'Customer d10f23' (ac86d3b5-4cab-5fa8-81c4-dc6cae0f2d16). Alias the new counterparty to the existing one to enable future matching."
+}

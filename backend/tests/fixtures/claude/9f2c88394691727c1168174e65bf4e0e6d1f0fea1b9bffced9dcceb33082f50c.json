@@ -1,0 +1,79 @@
+{
+  "alternative": null,
+  "fix_type": "repair_reference",
+  "params": {
+    "repairs": [
+      {
+        "from_ref": "00602f25bffadcfb71e202fbf9824fb",
+        "receipt_id": "208edec4-87d0-5468-8437-1c48960c4f40",
+        "to_ref": "00602f25bffa1dcfb71e202fbf9824fb"
+      },
+      {
+        "from_ref": "02346fd715e28d8e4db6893cd121f71",
+        "receipt_id": "2a7768ea-ed10-5b6f-9c93-54f56d475f6f",
+        "to_ref": "02346fd715e28d8e4fdb6893cd121f71"
+      },
+      {
+        "from_ref": "01ae5e4c5d2549f7c05000a2f5856c8",
+        "receipt_id": "429c0b9e-4069-5c81-9549-ef7dd7da449f",
+        "to_ref": "01ae5e4c5d2549f7c05000a2f5856c28"
+      },
+      {
+        "from_ref": "02332b54c758056809fd87d9c2748086",
+        "receipt_id": "46103754-534d-588e-8080-9971ac58eb8d",
+        "to_ref": "02332b54c758506809fd87d9c2748086"
+      },
+      {
+        "from_ref": "014e36af18c280a94d880a61b2f00713",
+        "receipt_id": "4c583f2a-c6a3-5bee-b4cb-b49110b6611f",
+        "to_ref": "014e36af18c280a94d880a16b2f00713"
+      },
+      {
+        "from_ref": "0198e0de42189b3914d46857a87fac91",
+        "receipt_id": "519f5252-80f9-5d6f-a4c0-fb240730940e",
+        "to_ref": "0198e0de42189b3941d46857a87fac91"
+      },
+      {
+        "from_ref": "0081c648af7d6a7bac2a93b6035d1e3",
+        "receipt_id": "5d4de3ae-f4bd-505e-a295-b11fd5044134",
+        "to_ref": "0081ce648af7d6a7bac2a93b6035d1e3"
+      },
+      {
+        "from_ref": "00c842d0ae662afc1d38fc055b02c75",
+        "receipt_id": "7497be50-4988-5d14-a564-c7995ca978d2",
+        "to_ref": "00c842d0ae6462afc1d38fc055b02c75"
+      },
+      {
+        "from_ref": "01b94d6943065deb1eedb643ba43114a",
+        "receipt_id": "859ed353-b086-5755-a4e6-d307a7f63bb6",
+        "to_ref": "01b94d6940365deb1eedb643ba43114a"
+      },
+      {
+        "from_ref": "012eab2625c5f8aaac6f37f2c9ef62f",
+        "receipt_id": "8d2deee8-b2b3-5d0e-bf83-71eeb784932e",
+        "to_ref": "012eab2625c5f8aaac6f37f2c19ef62f"
+      },
+      {
+        "from_ref": "015dd4d6681d1d150cafebef64a0a092",
+        "receipt_id": "97edba50-4930-563c-a884-6bf572cd95fc",
+        "to_ref": "015dd4d6681d1d15c0afebef64a0a092"
+      },
+      {
+        "from_ref": "0132451f29a10b6a65cf1bacc85f9afe",
+        "receipt_id": "9c3d2509-1d15-5f33-bf01-19d108d64fd6",
+        "to_ref": "0132451f29a10b66a5cf1bacc85f9afe"
+      },
+      {
+        "from_ref": "01d95eed9163a292a678ddac08bcf31",
+        "receipt_id": "bcd3298a-4b55-5791-94ef-e54025ff3cf7",
+        "to_ref": "01d95eed9163a292a6788ddac08bcf31"
+      },
+      {
+        "from_ref": "0078a358a4592b887eb140ef515f5ab",
+        "receipt_id": "e81788ea-80ce-5e14-ba04-56eed6ed9cb8",
+        "to_ref": "0078a358a14592b887eb140ef515f5ab"
+      }
+    ]
+  },
+  "summary": "Repair receipt reference numbers by correcting 1\u20132 character differences to match the correct receivable source IDs. All 14 receipts have reference strings with minor typos (single character insertions, deletions, or substitutions) that prevent matching against the corresponding receivable IDs. Correcting these transcription errors will allow the settled receivables to reconcile properly."
+}

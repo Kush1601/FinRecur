@@ -1,0 +1,36 @@
+# env / secrets
+.env
+.env.*
+!.env.example
+.claude/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+
+# node
+node_modules/
+.next/
+out/
+web/playwright-report/
+web/test-results/
+web/screenshots/
+
+# data / generated
+data/olist/raw/
+data/olist/*.zip
+reports/
+eval_report.json
+eval_report.md
+*.db
+*.sqlite
+
+# os / editors
+.DS_Store
+.idea/
+.vscode/

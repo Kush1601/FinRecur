@@ -1,0 +1,32 @@
+{
+  "alternative": {
+    "fix_type": "amend_policy",
+    "params": {
+      "after": 3.0,
+      "before": 2.9,
+      "justification": "Increase shipping-adjacent shortfall tolerance from 2.9% to 3.0% to accommodate the observed 2.5% credit card processing gap marked as shipping-equivalent. This avoids creating systematic exceptions for a consistent, expected cost.",
+      "key": "max_percent",
+      "rule_id": "R4"
+    },
+    "summary": "Raise the R4 shipping-adjacent shortfall tolerance ceiling from 2.9% to 3.0%, since all members show shortfall_eq_shipping=true and a uniform 2.5% gap. This treats the fee as a tolerable variance in shipping calculations rather than a separate deduction."
+  },
+  "fix_type": "record_fee_deduction",
+  "params": {
+    "fee_percent": 2.5,
+    "payment_type": "credit_card",
+    "receipt_ids": [
+      "24b24dab-ecfa-549d-bb1a-96d1258fd745",
+      "2f8ad9fe-7900-57c8-82b4-ad54f9b78789",
+      "32c11b68-4298-526b-8ea3-c9bb1015618e",
+      "6c626ea4-8d6b-5f82-ab6a-20d2b9880db9",
+      "787059aa-5e6e-56a1-a334-2cee55f29cc8",
+      "7adb6b36-398d-500f-9ba8-bbb2728feb9b",
+      "8933f4a8-a9e2-55f9-8037-a358f32db915",
+      "94d445b9-ecb5-55ac-aafa-523efdb3e7b7",
+      "9b3fa69b-0151-548e-b6a9-c6db455c104f",
+      "fddb1a1b-caf5-5483-a396-53ef7ef1b230",
+      "fe465bcd-5d24-5017-b6e7-0a2e0c27c14a"
+    ]
+  },
+  "summary": "Record a 2.5% credit card processing fee across all members in the group, including both write-off and exception members. The consistent 2.5% shortfall across all credit card receipts indicates a processor fee that should be absorbed systematically rather than creating persistent exceptions."
+}

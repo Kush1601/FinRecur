@@ -1,0 +1,22 @@
+{
+  "cause": "Credit card payments 2.5% short of expected amount.",
+  "confidence": 0.95,
+  "evidence_cited": [
+    "payment_type: credit_card",
+    "shortfall_pct: 2.5"
+  ],
+  "member_ids_confirmed": [
+    "24b24dab-ecfa-549d-bb1a-96d1258fd745",
+    "2f8ad9fe-7900-57c8-82b4-ad54f9b78789",
+    "32c11b68-4298-526b-8ea3-c9bb1015618e",
+    "6c626ea4-8d6b-5f82-ab6a-20d2b9880db9",
+    "787059aa-5e6e-56a1-a334-2cee55f29cc8",
+    "7adb6b36-398d-500f-9ba8-bbb2728feb9b",
+    "8933f4a8-a9e2-55f9-8037-a358f32db915",
+    "94d445b9-ecb5-55ac-aafa-523efdb3e7b7",
+    "9b3fa69b-0151-548e-b6a9-c6db455c104f",
+    "fddb1a1b-caf5-5483-a396-53ef7ef1b230",
+    "fe465bcd-5d24-5017-b6e7-0a2e0c27c14a"
+  ],
+  "member_ids_dropped": []
+}

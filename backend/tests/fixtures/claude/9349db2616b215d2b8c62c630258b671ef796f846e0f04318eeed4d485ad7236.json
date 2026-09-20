@@ -1,0 +1,19 @@
+{
+  "cause": "Credit card payments with 1-3 centavo shortfalls equivalent to shipping charges.",
+  "confidence": 0.92,
+  "evidence_cited": [
+    "payment_type: credit_card",
+    "shortfall_eq_shipping: true",
+    "shortfall_centavos: 1-3"
+  ],
+  "member_ids_confirmed": [
+    "009504e6-276b-5471-b3b0-1de32402c4a5",
+    "51928af9-83a4-52fb-aeb9-d017804763f4",
+    "5ebe93e3-2231-5102-88b7-6365f3f468cf",
+    "62b7137d-2105-5c83-873a-21c43e3cd59f",
+    "9417459a-43dc-578c-81a3-15b8cd619d8d",
+    "99c6a89d-92d8-5e36-9580-af6cb7994a8b",
+    "d184b28d-2c59-5b18-b7e1-1a75ed3ec597"
+  ],
+  "member_ids_dropped": []
+}

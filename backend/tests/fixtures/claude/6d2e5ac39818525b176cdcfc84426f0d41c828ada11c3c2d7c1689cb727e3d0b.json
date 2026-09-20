@@ -1,0 +1,18 @@
+{
+  "cause": "Receipts lack matching receivables in the system (all have empty reference, no matching open receivables found).",
+  "confidence": 0.95,
+  "evidence_cited": [
+    "reference_status: empty",
+    "receivable_id: null",
+    "counterparty_open_receivables: []",
+    "reason_code: no_match"
+  ],
+  "member_ids_confirmed": [
+    "2e2288c5-4983-5cbc-ac3e-fbdc10886b9d",
+    "36600134-324f-50f8-bffc-1fcd9c5665d4",
+    "5bdebbe4-5a9e-5115-9f47-443c0a1285a4",
+    "74c5d5a1-a10a-5734-b364-4332312264cb",
+    "f881aa44-2412-5715-b3ea-79a1f811b9b4"
+  ],
+  "member_ids_dropped": []
+}

@@ -1,0 +1,20 @@
+{
+  "cause": "Receipts lack matching receivable records in the system, causing unmatched payment documentation.",
+  "confidence": 0.95,
+  "evidence_cited": [
+    "receivable_id: null for all 8 members",
+    "reason_code: no_match for all 8 members",
+    "reference_status: empty for all 8 members"
+  ],
+  "member_ids_confirmed": [
+    "2e2288c5-4983-5cbc-ac3e-fbdc10886b9d",
+    "36600134-324f-50f8-bffc-1fcd9c5665d4",
+    "5bdebbe4-5a9e-5115-9f47-443c0a1285a4",
+    "6b25fce3-b7fe-5588-beb2-82d3b88114c1",
+    "74c5d5a1-a10a-5734-b364-4332312264cb",
+    "ba1177b6-6d96-59a8-bdcd-94b30767cf4b",
+    "d3ac2f23-ef79-5e64-ba77-5a76034231fe",
+    "f881aa44-2412-5715-b3ea-79a1f811b9b4"
+  ],
+  "member_ids_dropped": []
+}

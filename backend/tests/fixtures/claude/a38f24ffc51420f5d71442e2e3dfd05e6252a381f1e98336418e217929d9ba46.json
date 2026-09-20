@@ -1,0 +1,12 @@
+{
+  "alternative": null,
+  "fix_type": "amend_policy",
+  "params": {
+    "after": 3.5,
+    "before": 2.9,
+    "justification": "Observed consistent ~3.2-3.5% shortfalls across all credit card payments in this group, all flagged as shipping-adjacent (shortfall_eq_shipping=true). Current R4.max_percent of 2.9% is below the observed pattern. Increasing to 3.5% accommodates the full range while R4.must_fit_shipping=true ensures these match legitimate shipping costs rather than processor fees.",
+    "key": "max_percent",
+    "rule_id": "R4"
+  },
+  "summary": "Amend policy R4.max_percent from 2.9 to 3.5 to accommodate the consistent ~3.2-3.5% shipping-adjacent shortfalls observed across all credit card receipts in this group, which are currently being rejected but should be accepted as legitimate shipping cost variations."
+}
