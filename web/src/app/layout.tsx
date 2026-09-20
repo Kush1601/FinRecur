@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
 import HeaderNav from "@/components/HeaderNav";
 import "./globals.css";
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
   description: "Finds why reconciliation exceptions keep coming back, proposes a fix, proves it, and checks it stays fixed.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${plexSans.variable} ${plexMono.variable} ${spaceGrotesk.variable} h-full`}>
       <body className="min-h-full flex flex-col">
