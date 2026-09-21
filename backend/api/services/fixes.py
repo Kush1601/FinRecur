@@ -664,6 +664,29 @@ def _rewrite_decision(
 
     was_escalated = decision_row.outcome == DecisionOutcome.ESCALATED
 
+    # The old decision may already have settled a different way (e.g. R2
+    # amount/date before a reference repair lets R1 match it) -- reverse
+    # whatever it already wrote before recording the new outcome, or the two
+    # sets of allocations/adjustments double up on the same receivable.
+    old_allocs = session.scalars(
+        select(AllocationModel).where(AllocationModel.decision_id == decision_row.id)
+    ).all()
+    old_adjs = session.scalars(
+        select(AdjustmentModel).where(AdjustmentModel.decision_id == decision_row.id)
+    ).all()
+    for a in old_allocs:
+        receivable_by_id[str(a.receivable_id)].allocated -= a.amount
+        session.delete(a)
+    for a in old_adjs:
+        receivable_by_id[str(a.receivable_id)].adjusted -= a.amount
+        session.delete(a)
+    if old_allocs or old_adjs:
+        session.flush()
+        for a in old_allocs:
+            _recompute_status(receivable_by_id[str(a.receivable_id)])
+        for a in old_adjs:
+            _recompute_status(receivable_by_id[str(a.receivable_id)])
+
     if new_decision.outcome == "matched":
         for rv_id, amount in new_decision.allocations:
             rv_row = receivable_by_id[rv_id]
@@ -745,24 +768,7 @@ def _rewrite_decision(
                 exception_row.resolution = fix.summary or fix.type.value
     else:
         # A narrowing amendment: this receipt used to settle and no longer does.
-        old_allocs = session.scalars(
-            select(AllocationModel).where(AllocationModel.decision_id == decision_row.id)
-        ).all()
-        old_adjs = session.scalars(
-            select(AdjustmentModel).where(AdjustmentModel.decision_id == decision_row.id)
-        ).all()
-        for a in old_allocs:
-            receivable_by_id[str(a.receivable_id)].allocated -= a.amount
-            session.delete(a)
-        for a in old_adjs:
-            receivable_by_id[str(a.receivable_id)].adjusted -= a.amount
-            session.delete(a)
-        session.flush()
-        for a in old_allocs:
-            _recompute_status(receivable_by_id[str(a.receivable_id)])
-        for a in old_adjs:
-            _recompute_status(receivable_by_id[str(a.receivable_id)])
-
+        # The old allocations/adjustments were already reversed above.
         decision_row.outcome = DecisionOutcome.ESCALATED
         decision_row.rule_id = new_decision.rule_id
         decision_row.matched_by = None
@@ -855,6 +861,23 @@ def _apply_data_fix(
     elif fix.type == FixType.F4_SPLIT_RECEIPT:
         for split in p["splits"]:
             receipt_id = uuid.UUID(split["receipt_id"])
+            # The funding receipt commonly arrives here as an R6 overpayment,
+            # which already partially allocated it to one receivable and held
+            # the rest as an unapplied credit. Reverse that partial allocation
+            # first, or the split below double-books that receivable.
+            old_allocs = session.scalars(
+                select(AllocationModel).where(AllocationModel.receipt_id == receipt_id)
+            ).all()
+            for old in old_allocs:
+                old_rv = receivable_by_id.get(str(old.receivable_id)) or session.get(
+                    ReceivableModel, old.receivable_id
+                )
+                assert old_rv is not None
+                old_rv.allocated -= old.amount
+                _recompute_status(old_rv)
+                session.delete(old)
+            if old_allocs:
+                session.flush()
             for a in split["allocations"]:
                 rv_row = receivable_by_id[a["receivable_id"]]
                 alloc_id = uuid.uuid4()

@@ -25,6 +25,7 @@ from api.models import (  # noqa: E402
     DecisionOutcome,
     ExceptionRecord,
     Fix,
+    FixType,
     Receipt,
     Run,
     Verification,
@@ -78,6 +79,11 @@ def _exercise_proposed_fixes(session, run: Run) -> list[str]:
             continue
         outcome = run_dry_run(session, str(primary.id))
         if outcome.rejected or outcome.dry_run is None:
+            reason = outcome.reason or ""
+            if primary.type == FixType.F6_AMEND_POLICY and reason.startswith("out_of_bounds"):
+                # The guardrail catching an overreaching auto-proposed widening
+                # is the system working, not a pipeline failure.
+                continue
             problems.append(f"cluster {cluster.id}: dry run rejected ({outcome.reason})")
             continue
         fix = outcome.fix
@@ -109,7 +115,49 @@ def _outcome(
     return f"matched:{decision.rule_id}"
 
 
-def _score(session, run: Run, manifest: dict) -> tuple[dict, list[str]]:
+def _fault_outcomes(session, run: Run) -> dict[str, Counter]:
+    """Per-fault outcome shape, captured before any fix is exercised -- the
+    milestone baseline in the manifest describes the raw rule-engine pass,
+    not what the pipeline looks like after fixes are applied and verified."""
+    decisions = session.scalars(select(Decision).where(Decision.run_id == run.id)).all()
+    decision_by_receipt = {decision.receipt_id: decision for decision in decisions}
+    receipts = session.scalars(select(Receipt).where(Receipt.id.in_(decision_by_receipt))).all()
+    exception_by_decision = {
+        row.decision_id: row
+        for row in session.scalars(
+            select(ExceptionRecord).where(
+                ExceptionRecord.decision_id.in_([decision.id for decision in decisions])
+            )
+        ).all()
+    }
+    adjustments_by_decision: dict = defaultdict(list)
+    for adjustment in session.scalars(
+        select(Adjustment).where(Adjustment.decision_id.in_([decision.id for decision in decisions]))
+    ).all():
+        adjustments_by_decision[adjustment.decision_id].append(adjustment)
+
+    rows_by_fault: dict[str, list[tuple[Receipt, Decision]]] = defaultdict(list)
+    for receipt in receipts:
+        fault_id = receipt.meta.get("fault_id")
+        if fault_id:
+            rows_by_fault[fault_id].append((receipt, decision_by_receipt[receipt.id]))
+
+    return {
+        fault_id: Counter(
+            _outcome(
+                decision,
+                exception_by_decision.get(decision.id),
+                adjustments_by_decision.get(decision.id, []),
+            )
+            for _receipt, decision in rows
+        )
+        for fault_id, rows in rows_by_fault.items()
+    }
+
+
+def _score(
+    session, run: Run, manifest: dict, baseline_outcomes: dict[str, Counter]
+) -> tuple[dict, list[str]]:
     decisions = session.scalars(select(Decision).where(Decision.run_id == run.id)).all()
     decision_by_receipt = {decision.receipt_id: decision for decision in decisions}
     receipts = session.scalars(select(Receipt).where(Receipt.id.in_(decision_by_receipt))).all()
@@ -190,7 +238,8 @@ def _score(session, run: Run, manifest: dict) -> tuple[dict, list[str]]:
             }
         )
         observed_baseline = entry["expected"].get("observed", {})
-        if observed_baseline and observed_baseline.get("by_outcome") != dict(outcomes):
+        baseline_outcome = dict(baseline_outcomes.get(fault_id, {}))
+        if observed_baseline and observed_baseline.get("by_outcome") != baseline_outcome:
             failures.append(f"fault {fault_id}: outcomes changed from milestone baseline")
         if fault_id in clustered_baseline and not matching_clusters:
             failures.append(f"fault {fault_id}: expected a code-found cluster")
@@ -313,8 +362,9 @@ def main() -> None:
     manifest = json.loads(MANIFEST_PATH.read_text())
     with SessionLocal() as session:
         run = _ensure_evaluable_run(session)
+        baseline_outcomes = _fault_outcomes(session, run)
         fix_problems = _exercise_proposed_fixes(session, run)
-        report, failures = _score(session, run, manifest)
+        report, failures = _score(session, run, manifest, baseline_outcomes)
     report["fix_pipeline_problems"] = fix_problems
     failures = failures + [f"fix pipeline: {p}" for p in fix_problems]
     report["gate"] = {"passed": not failures, "failures": failures}
