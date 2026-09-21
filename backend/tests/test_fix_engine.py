@@ -178,19 +178,67 @@ def test_f5_record_fee_deduction_absorbed_member_round_trip(base_state):
     assert inverse["fee_amounts"] == {"r-2": 125}
 
 
-def test_f5_record_fee_deduction_escalated_member_allocates(base_state):
-    # Was escalated: never allocated at all.
+def test_f5_record_fee_deduction_escalated_member_allocates():
+    # Was escalated: never allocated at all. Genuinely short by 2.5% of the
+    # receivable's total (250 of 10000) -- the fee must explain that real gap,
+    # not just be handed the whole thing regardless of what was declared.
+    state = State(
+        receivables={"rv-1": _receivable("rv-1", 10000)},
+        receipts={"r-1": _receipt("r-1", 9750)},
+        allocations=[],
+        adjustments=[],
+        aliases={},
+        policy={
+            "R4": {"max_percent": 2.9, "must_fit_shipping": True},
+            "R7": {"tolerance_centavos": 1},
+        },
+    )
     params = {"receipt_ids": ["r-1"], "fee_percent": 2.5, "payment_type": "credit_card"}
     hint = {"r-1": "rv-1"}
-    assert validate("record_fee_deduction", params, _rows(base_state)) == Ok(None)
+    rows = Rows(
+        receipt_ids=frozenset(state.receipts),
+        receivable_ids=frozenset(state.receivables),
+        receipt_amounts={r.id: r.amount for r in state.receipts.values()},
+        policy=state.policy,
+        receipt_receivable=hint,
+        receivable_totals={rid: rv.total for rid, rv in state.receivables.items()},
+    )
+    assert validate("record_fee_deduction", params, rows) == Ok(None)
 
-    new_state, inverse = apply_to_state("record_fee_deduction", params, base_state, hint)
+    new_state, inverse = apply_to_state("record_fee_deduction", params, state, hint)
     assert len(new_state.allocations) == 1
-    assert new_state.allocations[0].amount == 10000
+    assert new_state.allocations[0].amount == 9750
     fee_adjustments = [a for a in new_state.adjustments if a.reason == "fee"]
     assert len(fee_adjustments) == 1
+    assert fee_adjustments[0].amount == 250
     assert new_state.receivables["rv-1"].remaining == 0
     assert inverse["new_allocation_receipt_ids"] == ["r-1"]
+
+
+def test_f5_record_fee_deduction_rejects_a_fee_that_does_not_match_the_gap():
+    # The receipt is short by 250 (2.5% of 10000), but the proposal declares a
+    # fee_percent that doesn't come close to that -- validate() must catch this
+    # rather than let apply_to_state silently balance the books some other way.
+    state = State(
+        receivables={"rv-1": _receivable("rv-1", 10000)},
+        receipts={"r-1": _receipt("r-1", 9750)},
+        allocations=[],
+        adjustments=[],
+        aliases={},
+        policy={"R4": {"max_percent": 2.9, "must_fit_shipping": True}},
+    )
+    rows = Rows(
+        receipt_ids=frozenset(state.receipts),
+        receivable_ids=frozenset(state.receivables),
+        receipt_amounts={r.id: r.amount for r in state.receipts.values()},
+        policy=state.policy,
+        receipt_receivable={"r-1": "rv-1"},
+        receivable_totals={"rv-1": 10000},
+    )
+    params = {"receipt_ids": ["r-1"], "fee_percent": 25.0, "payment_type": "credit_card"}
+    result = validate("record_fee_deduction", params, rows)
+    assert isinstance(result, Err)
+    assert "does not match its actual gap" in result.reason
 
 
 def test_f6_amend_policy_round_trip(base_state):

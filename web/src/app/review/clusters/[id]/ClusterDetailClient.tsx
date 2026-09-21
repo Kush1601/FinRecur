@@ -8,6 +8,7 @@ import {
   editFix,
   explainCluster,
   getCluster,
+  proposeManualFix,
   rejectFix,
   applyFix,
   type ApplyResult,
@@ -25,7 +26,7 @@ import {
   shortReference,
 } from "@/lib/presentation";
 import NotAvailable from "@/components/NotAvailable";
-import { readRole } from "@/lib/role";
+import { useRole } from "@/lib/role";
 
 const KIND_CLASS: Record<string, string> = {
   escalated: "badge-escalated",
@@ -183,9 +184,7 @@ export default function ClusterDetailClient({ id }: { id: string }) {
         {primaryFix ? (
           <FixBlock key={primaryFix.id} fix={primaryFix} altFix={altFix} onChanged={load} />
         ) : (
-          <p style={{ color: "var(--ink-dim)" }}>
-            No fix has been proposed. Request an explanation or choose a manual fix through the API.
-          </p>
+          <ManualFixForm clusterId={id} onProposed={load} />
         )}
       </section>
     </div>
@@ -203,7 +202,11 @@ function FixBlock({ fix, altFix, onChanged }: { fix: Fix; altFix?: Fix; onChange
   const [editError, setEditError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
-  const role = readRole();
+  // Reactive: a role switch in the header (Reviewer <-> Approver, or a name
+  // change) must be reflected here without a remount, or an approval taken
+  // right after switching roles is silently attributed to the old one.
+  const role = useRole();
+  const [staleNotice, setStaleNotice] = useState<string | null>(null);
 
   async function runDryRun() {
     const res = await dryRunFix(active.id);
@@ -226,7 +229,16 @@ function FixBlock({ fix, altFix, onChanged }: { fix: Fix; altFix?: Fix; onChange
     const res = await approveFix(active.id, role.role, role.name, note);
     if (res.ok) {
       setActionError(null);
-      await onChanged();
+      if (res.data.stale) {
+        // The backend refused to record this signature against a snapshot
+        // that no longer matches -- nothing was approved. Re-preview before
+        // letting the reviewer try again, the same recovery apply() already had.
+        setStaleNotice("Data changed since this preview. Approval was not recorded.");
+        await runDryRun();
+      } else {
+        setStaleNotice(null);
+        await onChanged();
+      }
     } else {
       setActionError(res.error);
     }
@@ -384,6 +396,7 @@ function FixBlock({ fix, altFix, onChanged }: { fix: Fix; altFix?: Fix; onChange
               acting={acting}
             />
           )}
+          {staleNotice && <NotAvailable label={staleNotice} />}
           {actionError && <NotAvailable label={actionError} />}
         </div>
       )}
@@ -474,34 +487,29 @@ function VerificationStrip({ result }: { result: ApplyResult }) {
 }
 
 function PolicyDiffBlock({ params }: { params: Record<string, unknown> }) {
-  const before = params.before as Record<string, unknown> | undefined;
-  const after = params.after as Record<string, unknown> | undefined;
-  const changedKeys = new Set<string>();
-  if (before && after) {
-    for (const k of Object.keys(after)) {
-      if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) changedKeys.add(k);
-    }
-  }
+  // F6 amend_policy params are {rule_id, key, before, after, justification} --
+  // before/after are the rule's own scalar value (e.g. 2.9), not an object of
+  // several keys. Treating them as a settings object made these boxes render
+  // empty for every real amend_policy fix.
+  const ruleId = typeof params.rule_id === "string" ? params.rule_id : null;
+  const key = typeof params.key === "string" ? params.key : null;
+  const label = ruleId && key ? `${ruleId}.${key}` : (ruleId ?? key ?? "value");
+  const before = params.before;
+  const after = params.after;
   return (
     <div className="flex flex-col gap-2">
       <div className="grid grid-cols-2 gap-2 text-[12px]">
         <div className="mono p-2" style={{ background: "var(--paper)", border: "1px solid var(--rule)" }}>
           <div style={{ color: "var(--ink-dim)" }}>Before</div>
-          {before &&
-            Object.entries(before).map(([k, v]) => (
-              <div key={k} style={{ background: changedKeys.has(k) ? "var(--accent-warn-bg)" : undefined }}>
-                {k}: {JSON.stringify(v)}
-              </div>
-            ))}
+          <div>
+            {label}: {JSON.stringify(before)}
+          </div>
         </div>
-        <div className="mono p-2" style={{ background: "var(--paper)", border: "1px solid var(--rule)" }}>
+        <div className="mono p-2" style={{ background: "var(--accent-warn-bg)", border: "1px solid var(--rule)" }}>
           <div style={{ color: "var(--ink-dim)" }}>After</div>
-          {after &&
-            Object.entries(after).map(([k, v]) => (
-              <div key={k} style={{ background: changedKeys.has(k) ? "var(--accent-warn-bg)" : undefined }}>
-                {k}: {JSON.stringify(v)}
-              </div>
-            ))}
+          <div>
+            {label}: {JSON.stringify(after)}
+          </div>
         </div>
       </div>
       {typeof params.justification === "string" && <p>{params.justification}</p>}
@@ -537,6 +545,79 @@ function formatParameter(key: string, value: unknown): string {
   if (value !== null && typeof value === "object") return `${Object.keys(value).length} configured values`;
   if (typeof value === "string" && value.length > 20) return shortReference(value);
   return String(value);
+}
+
+const MANUAL_FIX_TYPES = [
+  "add_counterparty_alias",
+  "repair_reference",
+  "mark_duplicate",
+  "split_receipt",
+  "record_fee_deduction",
+  "amend_policy",
+  "manual_review",
+] as const;
+
+function ManualFixForm({ clusterId, onProposed }: { clusterId: string; onProposed: () => Promise<void> }) {
+  const role = useRole();
+  const [type, setType] = useState<(typeof MANUAL_FIX_TYPES)[number]>("manual_review");
+  const [paramsText, setParamsText] = useState('{\n  "reason": ""\n}');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit() {
+    let params: Record<string, unknown>;
+    try {
+      params = JSON.parse(paramsText) as Record<string, unknown>;
+    } catch {
+      setError("Parameters must be valid JSON.");
+      return;
+    }
+    setSubmitting(true);
+    const res = await proposeManualFix(clusterId, type, params, role.name);
+    setSubmitting(false);
+    if (res.ok) {
+      setError(null);
+      await onProposed();
+    } else {
+      setError(res.error);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p style={{ color: "var(--ink-dim)" }}>
+        No fix has been proposed. Request an explanation above, or pick a fix type and its
+        parameters yourself -- the same dry-run, approval, and verification steps apply either way.
+      </p>
+      <label className="flex flex-col gap-1 text-[12px]">
+        Fix type
+        <select
+          className="compact-control"
+          value={type}
+          onChange={(e) => setType(e.target.value as (typeof MANUAL_FIX_TYPES)[number])}
+        >
+          {MANUAL_FIX_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {humanizeCode(t)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1 text-[12px]">
+        Parameters (JSON)
+        <textarea
+          className="mono text-[12px]"
+          rows={6}
+          value={paramsText}
+          onChange={(e) => setParamsText(e.target.value)}
+        />
+      </label>
+      <button onClick={submit} disabled={submitting} style={{ alignSelf: "flex-start" }}>
+        {submitting ? "Proposing…" : "Propose this fix"}
+      </button>
+      {error && <NotAvailable label={error} />}
+    </div>
+  );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

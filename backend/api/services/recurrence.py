@@ -28,7 +28,7 @@ def _matches(predicate: dict, receipt: Receipt, decision: Decision) -> bool:
         return bool(receipt.original_reference) or (
             decision.matched_by == "amount_date" and bool(receipt.reference)
         )
-    if "payment_type" in predicate and "shortfall_pct" in predicate:
+    if "payment_type" in predicate and predicate.get("shortfall_pct") is not None:
         if receipt.meta.get("payment_type") != predicate["payment_type"]:
             return False
         actual = decision.evidence.get("gap_percent")
@@ -37,7 +37,37 @@ def _matches(predicate: dict, receipt: Receipt, decision: Decision) -> bool:
         return abs(float(actual) - float(predicate["shortfall_pct"])) <= float(
             predicate.get("tol", 0)
         )
-    if "rule_id" in predicate:
+    if "payment_type" in predicate and predicate.get("fee_fixed_centavos") is not None:
+        if receipt.meta.get("payment_type") != predicate["payment_type"]:
+            return False
+        actual = decision.evidence.get("gap_centavos")
+        if actual is None:
+            return False
+        return abs(actual - predicate["fee_fixed_centavos"]) <= predicate.get("tol_centavos", 0)
+    if "rule_id" in predicate and "key" in predicate and "after" in predicate:
+        # An amend_policy signature. The receipt's own gap evidence -- not
+        # decision.rule_id -- decides whether the condition appeared: a rule
+        # tightened after the fix (or a different fault altogether) can make
+        # the SAME receipt escalate under a different rule_id, and one refused
+        # threshold looks like any other from the outside. Testing the actual
+        # gap against the band this amendment targeted is independent of
+        # which rule ultimately handled or refused it.
+        key = predicate["key"]
+        before, after = predicate.get("before"), predicate["after"]
+        lo, hi = (min(before, after), max(before, after)) if before is not None else (0, after)
+        if key == "max_percent":
+            actual = decision.evidence.get("gap_percent")
+            if actual is None:
+                return False
+            return lo < float(actual) <= hi
+        if key in ("threshold_centavos", "tolerance_centavos"):
+            actual = decision.evidence.get("gap_centavos")
+            if actual is None:
+                return False
+            return lo < actual <= hi
+        # window_days and anything else aren't evidenced on the decision in a
+        # way this evaluator can check independently; fall back to the rule
+        # label rather than claim a match we can't justify.
         return decision.rule_id == predicate["rule_id"]
     return False
 

@@ -95,6 +95,12 @@ class Rows:
     receivable_ids: frozenset[str]
     receipt_amounts: dict[str, int]
     policy: dict
+    # receipt_id -> the receivable it's allocated to (or would be, per the
+    # cluster's own candidate hint, for a receipt that was never allocated).
+    # Only populated where known; record_fee_deduction validation uses it to
+    # check a proposed fee against the receipt's actual gap.
+    receipt_receivable: dict[str, str] = field(default_factory=dict)
+    receivable_totals: dict[str, int] = field(default_factory=dict)
 
 
 def _validate_one(fix_type: str, params: dict, rows: Rows) -> str | None:
@@ -160,10 +166,33 @@ def _validate_one(fix_type: str, params: dict, rows: Rows) -> str | None:
         for rid in receipt_ids:
             if rid not in rows.receipt_ids:
                 return f"unknown receipt_id {rid}"
-        if "fee_percent" not in params and "fee_fixed_centavos" not in params:
+        fee_percent = params.get("fee_percent")
+        fee_fixed = params.get("fee_fixed_centavos")
+        if fee_percent is None and fee_fixed is None:
             return "missing fee_percent or fee_fixed_centavos"
         if not params.get("payment_type"):
             return "missing payment_type"
+        # A fee adjustment must be justified by the actual gap it claims to
+        # explain -- balance consistency alone (allocated+adjusted+remaining==
+        # total) is satisfied by ANY fee amount, including one that quietly
+        # writes off most of the receivable. Reject a fee that doesn't match
+        # the receipt's real shortfall within a small rounding tolerance.
+        for rid in receipt_ids:
+            receivable_id = rows.receipt_receivable.get(rid)
+            total = rows.receivable_totals.get(receivable_id) if receivable_id else None
+            if total is None:
+                continue  # nothing to check the gap against; apply_to_state will skip it too
+            gap = total - rows.receipt_amounts[rid]
+            if fee_fixed is not None:
+                declared = fee_fixed
+            else:
+                assert fee_percent is not None  # checked above: one of the two is required
+                declared = round(total * fee_percent / 100)
+            if abs(declared - gap) > 2:
+                return (
+                    f"fee {declared} for receipt {rid} does not match its actual gap {gap} "
+                    "(a fee must explain the shortfall it claims, not just balance the books)"
+                )
         return None
 
     if fix_type == "amend_policy":
@@ -316,7 +345,14 @@ def _apply_fee_deduction(
             rv.allocated += receipt.amount
             rv.remaining -= receipt.amount
             new_allocations.append(rid)
-            fee = rv.total - receipt.amount if fee_fixed is None else fee_fixed
+            # Same declared calculation as the already-allocated branch below --
+            # validate() has already checked it approximately matches the real
+            # gap, so this never becomes "the fee is whatever's left over".
+            if fee_fixed is not None:
+                fee = fee_fixed
+            else:
+                assert fee_percent is not None  # validate() requires one of the two
+                fee = round(rv.total * fee_percent / 100)
         elif fee_fixed is not None:
             fee = fee_fixed
         else:

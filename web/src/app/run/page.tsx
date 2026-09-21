@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   createRun,
   explainAll,
+  getRun,
   groupRun,
   listDecisions,
   listRuns,
@@ -149,6 +150,12 @@ export default function RunPage() {
     esRef.current?.close();
     stopCounters();
     if (!run) return;
+    // The SSE stream only got as far as whatever it emitted before Skip was
+    // clicked -- the run itself is already complete server-side, so the
+    // summary's counts are authoritative. Without this, skipping early made
+    // a finished run look like it barely did anything.
+    const summary = await getRun(run.id);
+    if (summary.ok) setCounters(summary.data.counts);
     const dec = await listDecisions(run.id, 0, 200);
     if (dec.ok) {
       setRows(

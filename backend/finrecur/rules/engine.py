@@ -217,11 +217,14 @@ def _resolve_group(
         )
 
     reason_code = ReasonCode.PARTIAL_PAYMENT_PENDING if is_group else ReasonCode.SHORT_PAY
+    # R1/R5 only label how the group was formed; R3/R4/R7 tried and refused above
+    # (see rules_tried), and R8 is the rule that actually gives up and escalates.
+    # Labelling this "R1"/"R5" made recurrence's rule_id-based matching wrong.
     return [
         Decision(
             receipt_id=r.id,
             outcome="escalated",
-            rule_id=rule_id,
+            rule_id="R8",
             matched_by=matched_by,
             reason_code=reason_code,
             evidence={

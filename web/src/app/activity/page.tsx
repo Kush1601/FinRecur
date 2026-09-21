@@ -16,6 +16,9 @@ type Tab = "ledger" | "recurrence";
 export default function ActivityPage() {
   const [tab, setTab] = useState<Tab>("ledger");
   const [ledger, setLedger] = useState<LedgerEvent[] | null>(null);
+  const [ledgerTotal, setLedgerTotal] = useState(0);
+  const [ledgerPage, setLedgerPage] = useState(1); // backend pages are 1-indexed
+  const LEDGER_PAGE_SIZE = 50;
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [recurrence, setRecurrence] = useState<RecurrenceEntry[] | null>(null);
   const [recurrenceError, setRecurrenceError] = useState<string | null>(null);
@@ -23,9 +26,14 @@ export default function ActivityPage() {
   const [entityType, setEntityType] = useState("");
 
   async function loadLedger() {
-    const res = await listLedger({ actor: actor || undefined, entityType: entityType || undefined });
+    const res = await listLedger({
+      actor: actor || undefined,
+      entityType: entityType || undefined,
+      page: ledgerPage,
+    });
     if (res.ok) {
       setLedger(res.data.items);
+      setLedgerTotal(res.data.total);
       setLedgerError(null);
     } else {
       setLedger(null);
@@ -46,10 +54,15 @@ export default function ActivityPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLedgerPage(1);
+  }, [actor, entityType]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadLedger();
     void loadRecurrence();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [actor, entityType]);
+  }, [actor, entityType, ledgerPage]);
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col gap-5 page-enter">
@@ -88,6 +101,26 @@ export default function ActivityPage() {
               {ledger.map((event) => (
                 <LedgerCard key={event.id} event={event} />
               ))}
+            </div>
+          )}
+          {ledgerTotal > 0 && (
+            <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--ink-dim)" }}>
+              <span>
+                Showing {(ledgerPage - 1) * LEDGER_PAGE_SIZE + 1}–
+                {Math.min(ledgerTotal, ledgerPage * LEDGER_PAGE_SIZE)} of {ledgerTotal} events
+              </span>
+              <button
+                onClick={() => setLedgerPage((p) => Math.max(1, p - 1))}
+                disabled={ledgerPage <= 1}
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setLedgerPage((p) => p + 1)}
+                disabled={ledgerPage * LEDGER_PAGE_SIZE >= ledgerTotal}
+              >
+                Next
+              </button>
             </div>
           )}
         </div>

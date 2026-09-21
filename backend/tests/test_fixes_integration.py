@@ -203,6 +203,16 @@ def test_r7_amendment_rejected_out_of_bounds(seeded_run_id, client):
     fix = client.get(f"/fixes/{fix_id}").json()
     assert fix["status"] == "rejected"
 
+    # A closed chapter -- viewing the cluster again (which triggers a fresh
+    # dry-run request) must not silently revive a rejected fix into DRY_RUN.
+    # FixesError maps to 404 everywhere else in this router (edit_fix, reject,
+    # etc.) for "not in a state this action applies to" -- same here.
+    second_attempt = client.post(f"/fixes/{fix_id}/dry-run")
+    assert second_attempt.status_code == 404
+    assert "rejected" in second_attempt.json()["detail"]
+    fix_after = client.get(f"/fixes/{fix_id}").json()
+    assert fix_after["status"] == "rejected"
+
 
 # --- stale approval --------------------------------------------------------------
 

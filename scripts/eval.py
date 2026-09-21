@@ -30,6 +30,11 @@ from api.models import (  # noqa: E402
     Verification,
     VerificationOutcome,
 )
+from api.services.fixes import (  # noqa: E402
+    apply_fix,
+    run_dry_run,
+)
+from api.services.fixes import approve as approve_fix  # noqa: E402
 from api.services.grouping import (  # noqa: E402
     explain_all_open_code_clusters,
     run_grouping_for_run,
@@ -53,6 +58,45 @@ def _ensure_evaluable_run(session) -> Run:
     if any(cluster.source.value == "code" for cluster in clusters):
         asyncio.run(explain_all_open_code_clusters(session, str(run.id), None))
     return run
+
+
+def _exercise_proposed_fixes(session, run: Run) -> list[str]:
+    """Actually dry-run, approve, and apply the primary proposed fix on every
+    cluster, so the gate can require an applied+verified outcome instead of
+    trusting a proposal that was never run through the pipeline it claims to
+    have evaluated. Returns problems encountered (a fix that couldn't reach
+    APPLIED is a gate failure, not a crash -- an out-of-bounds F6 proposal is
+    expected to be rejected, for instance)."""
+    problems: list[str] = []
+    clusters = session.scalars(select(Cluster).where(Cluster.run_id == run.id)).all()
+    for cluster in clusters:
+        fixes = session.scalars(
+            select(Fix).where(Fix.cluster_id == cluster.id, Fix.is_alternative.is_(False))
+        ).all()
+        primary = next((f for f in fixes if f.status.value == "proposed"), None)
+        if primary is None:
+            continue
+        outcome = run_dry_run(session, str(primary.id))
+        if outcome.rejected or outcome.dry_run is None:
+            problems.append(f"cluster {cluster.id}: dry run rejected ({outcome.reason})")
+            continue
+        fix = outcome.fix
+        approved = approve_fix(session, str(fix.id), "reviewer", "Eval Reviewer", "eval")
+        if approved.stale:
+            problems.append(f"cluster {cluster.id}: approval went stale during eval")
+            continue
+        if approved.needs_second_approval:
+            approved = approve_fix(session, str(fix.id), "approver", "Eval Approver", "eval")
+            if approved.stale or approved.needs_second_approval:
+                problems.append(f"cluster {cluster.id}: second approval did not clear")
+                continue
+        applied = apply_fix(session, str(fix.id))
+        if applied.stale or applied.verification is None:
+            problems.append(f"cluster {cluster.id}: apply did not produce a verification")
+            continue
+        if applied.verification.outcome != VerificationOutcome.VERIFIED:
+            problems.append(f"cluster {cluster.id}: verification outcome was not VERIFIED")
+    return problems
 
 
 def _outcome(
@@ -115,6 +159,7 @@ def _score(session, run: Run, manifest: dict) -> tuple[dict, list[str]]:
     failures: list[str] = []
     fault_results = []
     manifest_by_id = {entry["id"]: entry for entry in manifest["faults"]}
+    verification_rows = session.scalars(select(Verification)).all()
 
     for fault_id, entry in manifest_by_id.items():
         rows = rows_by_fault.get(fault_id, [])
@@ -149,19 +194,41 @@ def _score(session, run: Run, manifest: dict) -> tuple[dict, list[str]]:
             failures.append(f"fault {fault_id}: outcomes changed from milestone baseline")
         if fault_id in clustered_baseline and not matching_clusters:
             failures.append(f"fault {fault_id}: expected a code-found cluster")
+        # A cluster overlapping the fault isn't enough -- require every one of
+        # the fault's rows to actually be a member, not just some of them.
+        missing_from_cluster = receipt_ids - detected_ids
+        if fault_id in clustered_baseline and missing_from_cluster:
+            failures.append(
+                f"fault {fault_id}: only {len(detected_ids)}/{len(receipt_ids)} rows made it "
+                f"into a cluster (missing {len(missing_from_cluster)})"
+            )
         wanted_fix = expected_fix.get(fault_id)
         if fault_id in clustered_baseline and wanted_fix not in proposed_types:
             failures.append(f"fault {fault_id}: missing proposed fix {wanted_fix}")
+        # A proposed fix that was never actually applied and verified is a
+        # proposal, not a demonstrated correction -- require at least one
+        # VERIFIED Verification tied to one of the matching clusters' fixes.
+        cluster_fix_ids = {
+            fix.id for cluster in matching_clusters for fix in fixes_by_cluster.get(cluster.id, [])
+        }
+        fault_verifications = [v for v in verification_rows if v.fix_id in cluster_fix_ids]
+        applied_and_verified = any(
+            v.outcome == VerificationOutcome.VERIFIED for v in fault_verifications
+        )
+        if fault_id in clustered_baseline and not applied_and_verified:
+            failures.append(f"fault {fault_id}: fix was proposed but never applied and verified")
         fault_results.append(
             {
                 "id": fault_id,
                 "rows": len(rows),
                 "outcomes": dict(outcomes),
                 "code_grouped_rows": len(detected_ids),
+                "full_coverage": not missing_from_cluster,
                 "explained": any(cluster.cause for cluster in matching_clusters),
                 "expected_fix_type": wanted_fix,
                 "proposed_fix_types": proposed_types,
                 "fix_type_correct": wanted_fix in proposed_types,
+                "applied_and_verified": applied_and_verified,
             }
         )
 
@@ -173,7 +240,6 @@ def _score(session, run: Run, manifest: dict) -> tuple[dict, list[str]]:
         and cluster_receipts[cluster.id].issubset(real_receipt_ids)
         and cluster.cause is not None
     ]
-    verification_rows = session.scalars(select(Verification)).all()
     invariant_failures = sum(
         any(not result.get("passed", False) for result in verification.invariants)
         for verification in verification_rows
@@ -247,7 +313,11 @@ def main() -> None:
     manifest = json.loads(MANIFEST_PATH.read_text())
     with SessionLocal() as session:
         run = _ensure_evaluable_run(session)
+        fix_problems = _exercise_proposed_fixes(session, run)
         report, failures = _score(session, run, manifest)
+    report["fix_pipeline_problems"] = fix_problems
+    failures = failures + [f"fix pipeline: {p}" for p in fix_problems]
+    report["gate"] = {"passed": not failures, "failures": failures}
     JSON_PATH.write_text(json.dumps(report, indent=2) + "\n")
     MARKDOWN_PATH.write_text(_markdown(report))
     print(_markdown(report), end="")

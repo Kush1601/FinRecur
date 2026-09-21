@@ -155,6 +155,31 @@ from the build order in the plan. Runtime LLM calls use `claude-haiku-4-5-202510
 - Claude proposed placeholder ids ("<UNKNOWN>"): the fix was to supply candidates in the
   features (candidate canonical counterparties, candidate receivable sets) and reject any id
   not in the supplied rows. If a new fix type needs an id, code must offer the candidates.
+- A run must be idempotent: re-running day1, or day2 (which by design reprocesses day1's
+  receipts too), must never duplicate Allocation/Adjustment rows. `execute_run_stream` compares
+  each freshly computed decision against any existing one for that receipt: unchanged (same
+  outcome, rule, and money) is left alone; already reviewed by a fix or a human, or already
+  grouped into a cluster (`_is_clustered`), is left alone too; only a genuinely different
+  decision gets its old rows reversed and replaced. Never go back to "delete everything for this
+  batch and reinsert" -- that's the bug this replaced.
+- Adjustments/Allocations/Exceptions being inserted alongside brand-new Decision rows in one
+  `add_all()` call intermittently violated the `decisions` FK: Decision/Adjustment/Allocation
+  have no ORM `relationship()` between them (plain FK columns), so SQLAlchemy doesn't always
+  order a large mixed-table insert by dependency. New decisions are added and flushed in their
+  own batch (`new_decisions`) before anything referencing them.
+- Postgres `SUM()` over a bigint column returns `Decimal`, not `int` -- cast with `int(...)`
+  before mixing it into plain-int arithmetic, or a run's JSONB `counts` fails to serialize.
+- The pure rule engine only understands `Receivable.status` "open" or "cancelled" -- "settled"/
+  "partially_paid" are this layer's OWN output from a previous run, not something to feed back
+  in. Passing a persisted settlement status straight through (`row.status.value`) made R2's
+  "is this receivable a candidate" check silently exclude anything a prior run had already
+  settled, breaking both idempotency and a policy-widening dry run's history scan. Every place
+  that builds a core `Receivable` for the engine (`api/services/runs.py`, `finrecur/dryrun.py`)
+  normalises to `"cancelled" if genuinely cancelled else "open"`.
+- `_tally_from_existing` must add an existing decision's allocation/adjustment sums regardless
+  of outcome -- an overpayment (R6) is `outcome=escalated` but still carries a real allocation
+  for the matched portion. Gating the sum behind `outcome==SETTLED` silently dropped that money
+  from `run.counts` on every rerun (the DB stayed correct; only the reported total lied).
 
 - Python on this machine is 3.14; the project pins 3.12 (`.python-version`). The virtualenv is
   a standard venv at `backend/.venv` (created by `uv sync`). Either `source backend/.venv/bin/

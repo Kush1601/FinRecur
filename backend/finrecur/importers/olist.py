@@ -145,10 +145,9 @@ class OlistImporter:
                     "customer_state": customer["customer_state"],
                     "seller_locations": seller_locations,
                 }
-                if approved_at:
-                    received_at = _parse_ts(approved_at)
-                else:
-                    received_at = issued_at
+                simulated_date = not approved_at
+                received_at = _parse_ts(approved_at) if approved_at else issued_at
+                if simulated_date:
                     meta["simulated_date"] = True
 
                 receipts.append(
@@ -158,7 +157,9 @@ class OlistImporter:
                         amount=from_float(value),
                         received_at=received_at,
                         reference=order["order_id"],
-                        simulated=False,
+                        # The UI's "simulated" tag reads this field, not meta --
+                        # a fabricated received_at must be flagged here too.
+                        simulated=simulated_date,
                         meta=meta,
                     )
                 )

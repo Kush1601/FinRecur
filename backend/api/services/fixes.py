@@ -25,6 +25,7 @@ from api.models import (
     FixType,
     LedgerEvent,
     ReceivableStatus,
+    UnappliedCreditStatus,
     VerificationOutcome,
 )
 from api.models import Allocation as AllocationModel
@@ -38,7 +39,9 @@ from api.models import ReasonCode as DbReasonCode
 from api.models import Receipt as ReceiptModel
 from api.models import Receivable as ReceivableModel
 from api.models import Run as RunModel
+from api.models import UnappliedCredit as UnappliedCreditModel
 from api.models import Verification as VerificationModel
+from api.services.ledger_state import current_ledger_state
 from api.services.runs import BATCH_LINEAGE, build_aliases
 from finrecur.dryrun import DryRunResult
 from finrecur.dryrun import decide as decide_all
@@ -46,13 +49,6 @@ from finrecur.dryrun import dry_run as pure_dry_run
 from finrecur.fixes import engine
 from finrecur.fixes.bounds import check_bounds
 from finrecur.fixes.widening import classify
-from finrecur.invariants import (
-    LedgerAdjustment,
-    LedgerAllocation,
-    LedgerReceipt,
-    LedgerReceivable,
-    LedgerState,
-)
 from finrecur.invariants import check as check_invariants
 from finrecur.result import Err
 from finrecur.rules.types import Decision as PureDecision
@@ -166,12 +162,17 @@ def _load_state(session: Session, run: RunModel) -> engine.State:
     )
 
 
-def _rows_from_state(state: engine.State) -> engine.Rows:
+def _rows_from_state(state: engine.State, hint: dict[str, str] | None = None) -> engine.Rows:
+    receipt_receivable = dict(hint or {})
+    for a in state.allocations:
+        receipt_receivable.setdefault(a.receipt_id, a.receivable_id)
     return engine.Rows(
         receipt_ids=frozenset(state.receipts),
         receivable_ids=frozenset(state.receivables),
         receipt_amounts={rid: r.amount for rid, r in state.receipts.items()},
         policy=state.policy,
+        receipt_receivable=receipt_receivable,
+        receivable_totals={rid: r.total for rid, r in state.receivables.items()},
     )
 
 
@@ -206,7 +207,9 @@ def _affected_receivable_ids(cluster: Cluster, fix: Fix) -> set[str] | None:
     return ids
 
 
-def _snapshot_input(state: engine.State, receivable_ids: set[str] | None) -> dict:
+def _snapshot_input(
+    state: engine.State, receivable_ids: set[str] | None, receipt_ids: set[str] | None = None
+) -> dict:
     ids = receivable_ids if receivable_ids is not None else set(state.receivables)
     receivables = {
         rid: {
@@ -229,15 +232,56 @@ def _snapshot_input(state: engine.State, receivable_ids: set[str] | None) -> dic
     aliases = sorted(
         ({"alias": k, "canonical": v} for k, v in state.aliases.items()), key=lambda x: x["alias"]
     )
-    return {"receivables": receivables, "allocations": allocations, "aliases": aliases}
+    # A fix's params reference specific receipts by amount, reference, and
+    # duplicate marker (F2/F3/F4/F5 all key off these) -- a snapshot that only
+    # covered receivable balances could match while the receipt underneath a
+    # proposal had already changed (e.g. another fix repaired its reference).
+    rcpt_ids = receipt_ids if receipt_ids is not None else set(state.receipts)
+    receipts = {
+        rid: {
+            "amount": r.amount,
+            "counterparty_id": r.counterparty_id,
+            "reference": r.reference,
+            "duplicate_of": r.duplicate_of,
+        }
+        for rid, r in state.receipts.items()
+        if rid in rcpt_ids
+    }
+    return {
+        "receivables": receivables,
+        "allocations": allocations,
+        "aliases": aliases,
+        "receipts": receipts,
+    }
+
+
+def _affected_receipt_scope(cluster: Cluster, fix: Fix, state: engine.State) -> set[str] | None:
+    """None means "every receipt in the run's batch" -- amend_policy dry-runs and
+    snapshots over all history, so its receipts must be too."""
+    if fix.type == FixType.F6_AMEND_POLICY:
+        return None
+    ids = set(_affected_receipt_ids(cluster))
+    for rid in fix.params.get("receipt_ids", []):
+        ids.add(rid)
+    for pair in fix.params.get("pairs", []):
+        ids.add(pair.get("receipt_id"))
+        ids.add(pair.get("duplicate_of"))
+    for repair in fix.params.get("repairs", []):
+        ids.add(repair.get("receipt_id"))
+    for split in fix.params.get("splits", []):
+        ids.add(split.get("receipt_id"))
+    ids.discard(None)
+    return {rid for rid in ids if rid in state.receipts}
 
 
 def _snapshot_for_fix(session: Session, cluster: Cluster, fix: Fix) -> tuple[str, engine.State]:
     run = session.get(RunModel, cluster.run_id)
     assert run is not None
     state = _load_state(session, run)
-    ids = _affected_receivable_ids(cluster, fix)
-    return compute_snapshot_hash(_snapshot_input(state, ids), state.policy), state
+    receivable_ids = _affected_receivable_ids(cluster, fix)
+    receipt_ids = _affected_receipt_scope(cluster, fix, state)
+    snapshot = _snapshot_input(state, receivable_ids, receipt_ids)
+    return compute_snapshot_hash(snapshot, state.policy), state
 
 
 def _condition_signature(fix: Fix) -> dict | None:
@@ -253,13 +297,27 @@ def _condition_signature(fix: Fix) -> dict | None:
     if fix.type == FixType.F4_SPLIT_RECEIPT:
         return {"overpayment_multi_receivable": True}
     if fix.type == FixType.F5_RECORD_FEE_DEDUCTION:
+        if p.get("fee_percent") is not None:
+            return {
+                "payment_type": p.get("payment_type"),
+                "shortfall_pct": p["fee_percent"],
+                "tol": 0.01,
+            }
+        # A fixed-centavo fee has no percent to compare -- store the amount
+        # instead. (Storing shortfall_pct=None here used to crash the next
+        # run's recurrence check with float(None).)
         return {
             "payment_type": p.get("payment_type"),
-            "shortfall_pct": p.get("fee_percent"),
-            "tol": 0.01,
+            "fee_fixed_centavos": p.get("fee_fixed_centavos"),
+            "tol_centavos": 1,
         }
     if fix.type == FixType.F6_AMEND_POLICY:
-        return {"rule_id": p["rule_id"], "key": p["key"], "after": p["after"]}
+        return {
+            "rule_id": p["rule_id"],
+            "key": p["key"],
+            "before": p["before"],
+            "after": p["after"],
+        }
     return None
 
 
@@ -293,6 +351,12 @@ def run_dry_run(session: Session, fix_id: str) -> DryRunOutcome:
         if latest is None:
             raise FixesError(f"fix {fix_id} has no approved dry run")
         return DryRunOutcome(fix=fix, dry_run=latest)
+    if fix.status in {FixStatus.REJECTED, FixStatus.SUPERSEDED, FixStatus.VERIFICATION_FAILED}:
+        # A rejected or superseded proposal is a closed chapter -- viewing the
+        # cluster (which triggers a dry-run refresh) must not silently revive
+        # it into a fresh DRY_RUN, only the edit_fix path is allowed to create
+        # a new proposal to take its place.
+        raise FixesError(f"fix {fix_id} is {fix.status.value} and cannot be previewed again")
     cluster = session.get(Cluster, fix.cluster_id)
     assert cluster is not None
     run = session.get(RunModel, cluster.run_id)
@@ -305,7 +369,12 @@ def run_dry_run(session: Session, fix_id: str) -> DryRunOutcome:
     # dry run and snapshot for approval.
     if fix.status == FixStatus.DRY_RUN:
         current_hash = compute_snapshot_hash(
-            _snapshot_input(state, _affected_receivable_ids(cluster, fix)), state.policy
+            _snapshot_input(
+                state,
+                _affected_receivable_ids(cluster, fix),
+                _affected_receipt_scope(cluster, fix, state),
+            ),
+            state.policy,
         )
         if current_hash == fix.snapshot_hash:
             latest = session.scalars(
@@ -316,7 +385,8 @@ def run_dry_run(session: Session, fix_id: str) -> DryRunOutcome:
             if latest is not None:
                 return DryRunOutcome(fix=fix, dry_run=latest)
 
-    validation = engine.validate(fix.type.value, fix.params, _rows_from_state(state))
+    hint = _receipt_receivable_hint(cluster)
+    validation = engine.validate(fix.type.value, fix.params, _rows_from_state(state, hint))
     if isinstance(validation, Err):
         _ledger(
             session, "system", "dry_run_failed", "fix", fix.id, after={"reason": validation.reason}
@@ -347,13 +417,13 @@ def run_dry_run(session: Session, fix_id: str) -> DryRunOutcome:
             )
 
     affected_receipt_ids = _affected_receipt_ids(cluster)
-    hint = _receipt_receivable_hint(cluster)
     result: DryRunResult = pure_dry_run(
         fix.type.value, fix.params, state, affected_receipt_ids, hint
     )
 
     affected_receivable_ids = _affected_receivable_ids(cluster, fix)
-    snapshot_input = _snapshot_input(state, affected_receivable_ids)
+    affected_receipt_scope = _affected_receipt_scope(cluster, fix, state)
+    snapshot_input = _snapshot_input(state, affected_receivable_ids, affected_receipt_scope)
     hash_value = compute_snapshot_hash(snapshot_input, state.policy)
 
     dry_run_row = DryRunModel(
@@ -495,7 +565,16 @@ def approve(
     )
     existing_approvals.append(approval)
 
-    approvals = [a for a in existing_approvals if a.decision == ApprovalDecision.APPROVE]
+    # Only signatures bound to the CURRENT preview count. A dry run reused while
+    # a fix sits half-approved (fix.status stays DRY_RUN until the second
+    # signature lands) can move fix.snapshot_hash forward; an earlier approver's
+    # signature on the stale hash must not be combined with a later one on the
+    # new hash to satisfy the two-person rule.
+    approvals = [
+        a
+        for a in existing_approvals
+        if a.decision == ApprovalDecision.APPROVE and a.snapshot_hash == fix.snapshot_hash
+    ]
     needs_second = False
     if fix.is_widening:
         distinct_names = {a.name for a in approvals}
@@ -775,13 +854,14 @@ def _apply_data_fix(
 
     elif fix.type == FixType.F4_SPLIT_RECEIPT:
         for split in p["splits"]:
+            receipt_id = uuid.UUID(split["receipt_id"])
             for a in split["allocations"]:
                 rv_row = receivable_by_id[a["receivable_id"]]
                 alloc_id = uuid.uuid4()
                 session.add(
                     AllocationModel(
                         id=alloc_id,
-                        receipt_id=uuid.UUID(split["receipt_id"]),
+                        receipt_id=receipt_id,
                         receivable_id=uuid.UUID(a["receivable_id"]),
                         amount=a["amount"],
                         decision_id=None,
@@ -803,6 +883,46 @@ def _apply_data_fix(
                     },
                 )
                 _recompute_status(rv_row)
+
+            # The receipt that funded this split was previously escalated
+            # (overpayment, or "one receipt pays several receivables") with its
+            # own Decision/Exception and possibly a held UnappliedCredit. Close
+            # all three, matching what F1/F5 already do for their receipts.
+            decision_row = session.scalars(
+                select(DecisionModel).where(DecisionModel.receipt_id == receipt_id)
+            ).first()
+            if decision_row is not None:
+                decision_row.outcome = DecisionOutcome.SETTLED
+                decision_row.reviewed_by = f"fix:{fix.id}"
+                decision_row.reviewed_at = now
+                decision_row.review_outcome = "resolved_by_fix"
+                exception_row = session.scalars(
+                    select(ExceptionModel).where(
+                        ExceptionModel.decision_id == decision_row.id,
+                        ExceptionModel.status == ExceptionStatus.OPEN,
+                    )
+                ).first()
+                if exception_row is not None:
+                    exception_row.status = ExceptionStatus.RESOLVED
+                    exception_row.resolved_by = f"fix:{fix.id}"
+                    exception_row.resolution = fix.summary or fix.type.value
+
+            held_credits = session.scalars(
+                select(UnappliedCreditModel).where(
+                    UnappliedCreditModel.receipt_id == receipt_id,
+                    UnappliedCreditModel.status == UnappliedCreditStatus.HELD,
+                )
+            ).all()
+            for credit in held_credits:
+                credit.status = UnappliedCreditStatus.APPLIED
+                _ledger(
+                    session,
+                    "system",
+                    "consume_unapplied_credit",
+                    "unapplied_credit",
+                    credit.id,
+                    after={"fix_id": str(fix.id)},
+                )
 
     elif fix.type == FixType.F5_RECORD_FEE_DEDUCTION:
         # Relabelled in place, not deleted+reinserted: a ClusterMember row points at
@@ -1035,7 +1155,7 @@ def apply_fix(session: Session, fix_id: str) -> ApplyOutcome:
 
         session.flush()
 
-        ledger_state = _current_ledger_state(session, run)
+        ledger_state = current_ledger_state(session, run, build_aliases)
         invariant_results = check_invariants(ledger_state)
         failures = [r for r in invariant_results if not r.passed]
 
@@ -1156,44 +1276,3 @@ def _actual_totals(session: Session, fix: Fix, cluster: Cluster) -> tuple[int, i
     applied_total = sum(a.amount for a in allocations)
     written_off_total = sum(a.amount for a in written_offs)
     return applied_total, written_off_total
-
-
-def _current_ledger_state(session: Session, run: RunModel) -> LedgerState:
-    batches_included = list(BATCH_LINEAGE[run.batch_label])
-    receivable_rows = session.scalars(
-        select(ReceivableModel).where(ReceivableModel.meta["batch"].astext.in_(batches_included))
-    ).all()
-    receipt_rows = session.scalars(
-        select(ReceiptModel).where(ReceiptModel.meta["batch"].astext.in_(batches_included))
-    ).all()
-    receivable_ids = [r.id for r in receivable_rows]
-    allocations = (
-        session.scalars(
-            select(AllocationModel).where(AllocationModel.receivable_id.in_(receivable_ids))
-        ).all()
-        if receivable_ids
-        else []
-    )
-    adjustments = (
-        session.scalars(
-            select(AdjustmentModel).where(AdjustmentModel.receivable_id.in_(receivable_ids))
-        ).all()
-        if receivable_ids
-        else []
-    )
-    return LedgerState(
-        receipts=[LedgerReceipt(str(r.id), str(r.counterparty_id), r.amount) for r in receipt_rows],
-        receivables=[
-            LedgerReceivable(
-                str(r.id), str(r.counterparty_id), r.total, r.allocated, r.adjusted, r.remaining
-            )
-            for r in receivable_rows
-        ],
-        allocations=[
-            LedgerAllocation(str(a.receipt_id), str(a.receivable_id), a.amount) for a in allocations
-        ],
-        adjustments=[
-            LedgerAdjustment(str(a.receivable_id), a.amount, a.reason.value) for a in adjustments
-        ],
-        aliases=build_aliases(session),
-    )

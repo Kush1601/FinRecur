@@ -43,13 +43,18 @@ class DryRunResult:
 
 
 def _to_schema_receivable(rv) -> Receivable:
+    # Same normalisation as api/services/runs.py::_to_core_receivable: the
+    # rule engine only understands "open" or "cancelled" -- a receivable this
+    # very state already marks settled/partially_paid must still be evaluated
+    # as an open candidate for the full from-scratch recompute a dry run does.
+    status = "cancelled" if rv.status == "cancelled" else "open"
     return Receivable(
         id=rv.id,
         counterparty_id=rv.counterparty_id,
         total=rv.total,
         shipping=rv.shipping,
         issued_at=rv.issued_at,
-        status=rv.status,
+        status=status,
         meta=rv.meta,
     )
 
