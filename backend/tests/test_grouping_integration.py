@@ -215,7 +215,27 @@ def test_cluster_detail_returns_member_evidence(client, seeded_run):
     body = detail.json()
     assert len(body["members"]) == body["member_count"]
     assert all(member["receipt_id"] for member in body["members"])
+    assert all(member["source_receipt_id"] for member in body["members"])
+    assert all(member["reference"] for member in body["members"])
+    assert all(member["counterparty"] for member in body["members"])
+    assert all(member["received_at"] for member in body["members"])
+    assert all(member["customer_state"] for member in body["members"])
+    assert all(member["seller_locations"] for member in body["members"])
     assert all(member["amount_centavos"] > 0 for member in body["members"])
+
+
+def test_singleton_exceptions_include_review_context(client, seeded_run):
+    client.post(f"/runs/{seeded_run}/group")
+    response = client.get(f"/exceptions?run_id={seeded_run}&status=open&singletons_only=true")
+    assert response.status_code == 200
+    rows = response.json()["items"]
+    assert rows
+    assert all(row["source_receipt_id"] for row in rows)
+    assert all(row["reference"] for row in rows)
+    assert all(row["counterparty"] for row in rows)
+    assert all(row["amount_centavos"] > 0 for row in rows)
+    assert all(row["received_at"] for row in rows)
+    assert all(row["customer_state"] for row in rows)
 
 
 def test_reviewer_can_propose_a_manual_fix_for_a_code_cluster(client, seeded_run):

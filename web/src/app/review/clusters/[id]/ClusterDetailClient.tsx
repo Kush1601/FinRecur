@@ -16,6 +16,14 @@ import {
   type Fix,
 } from "@/lib/api";
 import { formatBRL } from "@/lib/format";
+import {
+  displayCounterparty,
+  formatDateTime,
+  formatPaymentType,
+  formatSellerLocations,
+  humanizeCode,
+  shortReference,
+} from "@/lib/presentation";
 import NotAvailable from "@/components/NotAvailable";
 import { readRole } from "@/lib/role";
 
@@ -86,7 +94,9 @@ export default function ClusterDetailClient({ id }: { id: string }) {
           <p className="page-kicker">Exception cluster / {cluster.member_count} members</p>
           <div className="flex items-center gap-2">
             <h1 className="page-title">Review the evidence</h1>
-            <span className={`tag ${KIND_CLASS[cluster.kind] ?? ""}`}>{cluster.kind}</span>
+            <span className={`tag tag-readable ${KIND_CLASS[cluster.kind] ?? ""}`}>
+              {humanizeCode(cluster.kind)}
+            </span>
             {cluster.source === "code" && <span className="tag">code</span>}
           </div>
         </div>
@@ -111,7 +121,9 @@ export default function ClusterDetailClient({ id }: { id: string }) {
         )}
         {evidence !== undefined && (
           <details>
-            <summary style={{ cursor: "pointer", color: "var(--ink-dim)" }}>Evidence cited</summary>
+            <summary style={{ cursor: "pointer", color: "var(--ink-dim)" }}>
+              Technical evidence and identifiers
+            </summary>
             <pre className="mono text-[12px] p-2 mt-2" style={{ background: "var(--paper)", border: "1px solid var(--rule)" }}>
               {JSON.stringify(evidence, null, 2)}
             </pre>
@@ -127,22 +139,38 @@ export default function ClusterDetailClient({ id }: { id: string }) {
           <table>
             <thead>
               <tr>
-                <th>Receipt</th>
-                <th>Counterparty</th>
+                <th>Order / payment</th>
+                <th>Customer</th>
+                <th>Payment</th>
+                <th>Route</th>
                 <th>Reason</th>
                 <th className="num">Amount</th>
+                <th className="num">Difference</th>
               </tr>
             </thead>
             <tbody>
               {members.map((member) => (
                 <tr key={member.receipt_id}>
-                  <td className="mono">
-                    {member.receipt_id}{" "}
-                    {member.simulated && <span className="tag tag-simulated">simulated</span>}
+                  <td>
+                    <div className="mono font-medium">Order {shortReference(member.reference)}</div>
+                    <div className="table-secondary mono">
+                      Payment {shortReference(member.source_receipt_id)} · {formatDateTime(member.received_at)}
+                    </div>
+                    {member.simulated && <span className="tag tag-simulated mt-1">simulated scenario</span>}
                   </td>
-                  <td>{member.counterparty ?? "—"}</td>
-                  <td>{member.reason_code ?? member.adjustment_reason ?? member.matched_by ?? "—"}</td>
+                  <td>{displayCounterparty(member.counterparty)}</td>
+                  <td>{formatPaymentType(member.payment_type)}</td>
+                  <td>
+                    <div>{formatSellerLocations(member.seller_locations)}</div>
+                    <div className="table-secondary">Customer state {member.customer_state ?? "unavailable"}</div>
+                  </td>
+                  <td>{humanizeCode(member.reason_code ?? member.adjustment_reason ?? member.matched_by ?? "unknown")}</td>
                   <td className="num mono">{formatBRL(member.amount_centavos ?? 0)}</td>
+                  <td className="num mono">
+                    {typeof member.features?.shortfall_centavos === "number"
+                      ? formatBRL(member.features.shortfall_centavos)
+                      : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -259,8 +287,8 @@ function FixBlock({ fix, altFix, onChanged }: { fix: Fix; altFix?: Fix; onChange
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <span className="tag">{active.type}</span>
-        <span className="tag">{active.status}</span>
+        <span className="tag tag-readable">{humanizeCode(active.type)}</span>
+        <span className="tag tag-readable">{active.status === "dry_run" ? "Ready to review" : humanizeCode(active.status)}</span>
         {active.is_widening && <span className="tag badge-absorbed">widening</span>}
         {altFix && (
           <button onClick={toggleAlternative} className="ml-auto">
@@ -298,10 +326,10 @@ function FixBlock({ fix, altFix, onChanged }: { fix: Fix; altFix?: Fix; onChange
       {dryRun && (
         <div className="flex flex-col gap-2">
           <div className="grid grid-cols-4 gap-2 text-[12px]">
-            <Stat label="Would match" value={String(dryRun.predicted.matched)} />
-            <Stat label="Still failing" value={String(dryRun.predicted.still_failing)} />
-            <Stat label="Applied" value={formatBRL(dryRun.predicted.applied_centavos)} />
-            <Stat label="Written off" value={formatBRL(dryRun.predicted.written_off_centavos)} />
+            <Stat label="Would settle" value={String(dryRun.predicted.matched)} />
+            <Stat label="Still needs review" value={String(dryRun.predicted.still_failing)} />
+            <Stat label="Affected value" value={formatBRL(dryRun.predicted.applied_centavos)} />
+            <Stat label="Fee / write-off" value={formatBRL(dryRun.predicted.written_off_centavos)} />
           </div>
 
           {dryRun.side_effects.length > 0 && (
@@ -322,8 +350,8 @@ function FixBlock({ fix, altFix, onChanged }: { fix: Fix; altFix?: Fix; onChange
                 <tbody>
                   {dryRun.side_effects.map((s) => (
                     <tr key={s.receipt_id}>
-                      <td className="mono">{s.receipt_id}</td>
-                      <td className="mono">{s.counterparty_id}</td>
+                      <td className="mono">{shortReference(s.receipt_id)}</td>
+                      <td className="mono">{shortReference(s.counterparty_id)}</td>
                       <td className="num mono">{formatBRL(s.amount_centavos)}</td>
                       <td>{s.would_become}</td>
                       <td className="num mono">{formatBRL(s.write_off_centavos)}</td>
@@ -403,7 +431,7 @@ function FixActions({
             Give second signature
           </button>
         )}
-        <button onClick={apply} disabled={acting || !canApply}>Apply</button>
+        <button onClick={apply} disabled={acting || !canApply}>Apply approved fix</button>
       </div>
       {!showApproverGate && role === "approver" && (
         <p style={{ color: "var(--ink-dim)", fontSize: 12 }}>
@@ -483,15 +511,32 @@ function PolicyDiffBlock({ params }: { params: Record<string, unknown> }) {
 
 function ParamsBlock({ params }: { params: Record<string, unknown> }) {
   return (
-    <div className="grid grid-cols-2 gap-2 text-[13px]">
-      {Object.entries(params).map(([k, v]) => (
-        <div key={k} className="flex flex-col gap-1">
-          <span style={{ color: "var(--ink-dim)", fontSize: 11 }}>{k}</span>
-          <code className="mono text-[12px]">{typeof v === "object" ? JSON.stringify(v) : String(v)}</code>
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="decision-facts">
+        {Object.entries(params).map(([key, value]) => (
+          <div key={key} className="decision-fact">
+            <span>{humanizeCode(key)}</span>
+            <strong>{formatParameter(key, value)}</strong>
+          </div>
+        ))}
+      </div>
+      <details>
+        <summary style={{ cursor: "pointer", color: "var(--ink-dim)" }}>Technical parameters</summary>
+        <pre className="mono text-[12px] p-2 mt-2" style={{ background: "var(--paper)", border: "1px solid var(--rule)" }}>
+          {JSON.stringify(params, null, 2)}
+        </pre>
+      </details>
+    </>
   );
+}
+
+function formatParameter(key: string, value: unknown): string {
+  if (key === "fee_percent" && typeof value === "number") return `${value}%`;
+  if (key === "payment_type" && typeof value === "string") return formatPaymentType(value);
+  if (Array.isArray(value)) return `${value.length} selected ${key === "receipt_ids" ? "receipts" : "items"}`;
+  if (value !== null && typeof value === "object") return `${Object.keys(value).length} configured values`;
+  if (typeof value === "string" && value.length > 20) return shortReference(value);
+  return String(value);
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

@@ -197,12 +197,12 @@ def _load_postgres(day1: ImportBundle) -> dict:
                     },
                     "R1": {
                         "kind": "exact",
-                        "source": "Maximor homepage example, number set for Olist scale",
+                        "source": "Exact cited-order match",
                     },
                     "R2": {
                         "kind": "window_days",
                         "window_days": 30,
-                        "source": "Maximor homepage example, number set for Olist scale",
+                        "source": "Amount and counterparty match within the configured date window",
                     },
                     "R7": {
                         "kind": "tolerance",
@@ -226,7 +226,7 @@ def _load_postgres(day1: ImportBundle) -> dict:
                     },
                     "R8": {
                         "kind": "escalate",
-                        "source": "Maximor homepage example",
+                        "source": "Fallback when no supported rule can settle the receipt",
                     },
                 },
             )

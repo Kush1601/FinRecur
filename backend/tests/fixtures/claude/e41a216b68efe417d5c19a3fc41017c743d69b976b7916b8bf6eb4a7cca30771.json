@@ -1,0 +1,8 @@
+{
+  "alternative": null,
+  "fix_type": "manual_review",
+  "params": {
+    "reason": "Multiple duplicate fingerprints suggest potential duplicates, but no matching receivable records exist in the system to repair references or split receipts. Receipts lack matching receivable records (no_match reason code). Cannot apply add_counterparty_alias (no candidate_canonical_counterparties), repair_reference (no nearest_receivable_source_id), or split_receipt (no candidate_receivable_set). Multiple new counterparties (6f9c24b6-33da-5118-8740-6d4e80858b72 and 750b7d23-a230-597d-8aa0-2009ddc290f3) for the same normalized counterparty name require investigation into whether these represent duplicates or legitimately distinct entities before proceeding."
+  },
+  "summary": "No actionable fix available from the standard menu. The receipts have no matching receivables and no reference information to repair. Multiple new counterparties share the same normalized name but have no candidate matches listed. Manual review required to determine if counterparties should be consolidated and to investigate why no receivable records exist for these payments."
+}

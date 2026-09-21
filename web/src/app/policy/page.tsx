@@ -3,6 +3,18 @@
 import { useEffect, useState } from "react";
 import { getPolicy, policyExportUrl, type Policy } from "@/lib/api";
 import NotAvailable from "@/components/NotAvailable";
+import { formatDateTime, humanizeCode } from "@/lib/presentation";
+
+const RULE_LABELS: Record<string, string> = {
+  R1: "Exact order reference",
+  R2: "Amount and date window",
+  R3: "Short-payment threshold",
+  R4: "Percentage tolerance",
+  R5: "Grouped payment",
+  R6: "Overpayment",
+  R7: "Rounding tolerance",
+  R8: "Escalate for review",
+};
 
 export default function PolicyPage() {
   const [policy, setPolicy] = useState<Policy | null>(null);
@@ -45,11 +57,18 @@ export default function PolicyPage() {
               {Object.entries(policy.current.rules).map(([ruleId, values]) => (
                 <tr key={ruleId}>
                   <td className="mono">{ruleId}</td>
-                  <td className="mono text-[12px]">
-                    {Object.entries(values)
-                      .filter(([k]) => k !== "source")
-                      .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-                      .join(", ")}
+                  <td>
+                    <div className="font-medium">{RULE_LABELS[ruleId] ?? ruleId}</div>
+                    <div className="policy-values">
+                      {Object.entries(values)
+                        .filter(([key]) => key !== "source" && key !== "kind")
+                        .map(([key, value]) => (
+                          <span key={key}>{humanizeCode(key)}: <strong>{formatPolicyValue(key, value)}</strong></span>
+                        ))}
+                      {Object.keys(values).every((key) => key === "source" || key === "kind") && (
+                        <span>No configurable threshold</span>
+                      )}
+                    </div>
                   </td>
                   <td className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
                     {typeof values.source === "string" ? values.source : "—"}
@@ -73,8 +92,8 @@ export default function PolicyPage() {
                 {policy.versions.map((v) => (
                   <tr key={v.version}>
                     <td className="mono">v{v.version}</td>
-                    <td>{v.created_by}</td>
-                    <td className="mono">{v.created_at}</td>
+                    <td>{v.created_by === "seed" ? "Demo setup" : v.created_by}</td>
+                    <td>{formatDateTime(v.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -84,4 +103,13 @@ export default function PolicyPage() {
       )}
     </div>
   );
+}
+
+function formatPolicyValue(key: string, value: unknown): string {
+  if (key === "threshold_centavos" || key === "tolerance_centavos") {
+    return `R$ ${(Number(value) / 100).toFixed(2)}`;
+  }
+  if (key === "max_percent") return `${value}%`;
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
 }

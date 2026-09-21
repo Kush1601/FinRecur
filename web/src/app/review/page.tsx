@@ -12,6 +12,14 @@ import {
   type ExceptionRow,
 } from "@/lib/api";
 import { formatBRL, formatPercent } from "@/lib/format";
+import {
+  displayCounterparty,
+  formatDateTime,
+  formatPaymentType,
+  formatSellerLocations,
+  humanizeCode,
+  shortReference,
+} from "@/lib/presentation";
 import NotAvailable from "@/components/NotAvailable";
 import { readRole } from "@/lib/role";
 
@@ -143,7 +151,9 @@ function ClusterCard({ cluster }: { cluster: Cluster }) {
   return (
     <Link href={`/review/clusters/${cluster.id}`} className="card cluster-card p-4 flex flex-col gap-2 no-underline">
       <div className="flex items-center gap-2">
-        <span className={`tag ${KIND_CLASS[cluster.kind] ?? ""}`}>{cluster.kind}</span>
+        <span className={`tag tag-readable ${KIND_CLASS[cluster.kind] ?? ""}`}>
+          {humanizeCode(cluster.kind)}
+        </span>
         {cluster.source === "code" && <span className="tag">code</span>}
         <span className="ml-auto num mono font-medium">{formatBRL(cluster.money_centavos ?? 0)}</span>
       </div>
@@ -194,28 +204,62 @@ function SingletonRow({ exception }: { exception: ExceptionRow }) {
   }
 
   return (
-    <div className="card p-3 flex flex-col gap-2">
-      <div className="flex items-center justify-between">
+    <div className="card singleton-card p-4 flex flex-col gap-3">
+      <div className="singleton-heading">
         <div>
-          <span className="tag badge-escalated">{exception.reason_code}</span>{" "}
-          {exception.simulated && <span className="tag tag-simulated">simulated</span>}{" "}
-          <span className="mono" style={{ color: "var(--ink-dim)" }}>#{exception.receipt_id ?? exception.decision_id}</span>
+          <div className="flex items-center gap-2">
+            <span className="tag tag-readable badge-escalated">{humanizeCode(exception.reason_code)}</span>
+            {exception.simulated && <span className="tag tag-simulated">simulated scenario</span>}
+          </div>
+          <div className="singleton-reference">
+            Order <span className="mono">{shortReference(exception.reference)}</span>
+          </div>
         </div>
-        <div>
+        <div className="singleton-status">
           {exception.resolved_by ? (
-            <span style={{ color: "var(--ink-dim)" }}>Reviewed by {exception.resolved_by}</span>
+            <span>Reviewed by {exception.resolved_by}</span>
           ) : (
-            <span style={{ color: "var(--ink-dim)" }}>Auto · open</span>
+            <span>Detected automatically · Awaiting review</span>
           )}
+          <button onClick={() => setOpen((o) => !o)}>{open ? "Close review" : "Review details"}</button>
         </div>
-        <button onClick={() => setOpen((o) => !o)}>{open ? "Hide evidence" : "Expand evidence"}</button>
+      </div>
+
+      <div className="singleton-facts">
+        <span>{displayCounterparty(exception.counterparty)}</span>
+        <span>{formatPaymentType(exception.payment_type)}</span>
+        <span>{formatSellerLocations(exception.seller_locations)} → Customer {exception.customer_state ?? "state unavailable"}</span>
+        <span>{formatDateTime(exception.received_at)}</span>
+        <strong className="mono">{formatBRL(exception.amount_centavos)}</strong>
       </div>
 
       {open && (
         <>
-          <pre className="mono text-[12px] p-2" style={{ background: "var(--paper)", border: "1px solid var(--rule)" }}>
-            {exception.evidence ? JSON.stringify(exception.evidence, null, 2) : "No evidence attached in this build."}
-          </pre>
+          <div className="review-context">
+            <div>
+              <span>Reason</span>
+              <strong>{humanizeCode(exception.reason_code)}</strong>
+            </div>
+            <div>
+              <span>Payment reference</span>
+              <strong className="mono">{shortReference(exception.source_receipt_id, 12)}</strong>
+            </div>
+            <div>
+              <span>Policy</span>
+              <strong>Version {exception.policy_version}</strong>
+            </div>
+            <div>
+              <span>Suggested matches</span>
+              <strong>{candidates.length || "None"}</strong>
+            </div>
+          </div>
+
+          <details>
+            <summary style={{ cursor: "pointer", color: "var(--ink-dim)" }}>Technical evidence</summary>
+            <pre className="mono text-[12px] p-2 mt-2" style={{ background: "var(--paper)", border: "1px solid var(--rule)" }}>
+              {exception.evidence ? JSON.stringify(exception.evidence, null, 2) : "No technical evidence attached."}
+            </pre>
+          </details>
 
           <div className="flex flex-col gap-2">
             <select value={action} onChange={(e) => setAction(e.target.value)}>

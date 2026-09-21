@@ -22,14 +22,14 @@ test("Day 1 -> approve alias fix -> Day 2 recurrence", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Cause" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Proposed fix" })).toBeVisible();
-  await expect(page.getByText("add_counterparty_alias", { exact: true })).toBeVisible();
-  await expect(page.getByText("Would match")).toBeVisible();
+  await expect(page.getByText("Add counterparty alias", { exact: true })).toBeVisible();
+  await expect(page.getByText("Would settle")).toBeVisible();
 
   await page.getByPlaceholder("Note").fill("Alias evidence checked against the source rows.");
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByText("approved", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Apply", exact: true })).toBeEnabled();
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Apply approved fix", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Apply approved fix", exact: true }).click();
   await expect(page.getByText(/Verified · prediction matched/)).toBeVisible();
 
   await page.goto("/run");

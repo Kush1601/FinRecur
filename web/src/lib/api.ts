@@ -143,6 +143,16 @@ export const ExceptionRowSchema = z.object({
   id: z.string(),
   decision_id: z.string(),
   receipt_id: z.string().optional(),
+  source_receipt_id: z.string(),
+  reference: z.string(),
+  counterparty: z.string(),
+  amount_centavos: z.number().int(),
+  received_at: z.string(),
+  payment_type: z.string().nullable(),
+  customer_state: z.string().nullable(),
+  seller_locations: z.array(
+    z.object({ seller_id: z.string(), city: z.string(), state: z.string() }),
+  ),
   simulated: z.boolean().optional(),
   reason_code: z.string(),
   evidence: z.unknown().optional(),
@@ -182,8 +192,16 @@ export type Cluster = z.infer<typeof ClusterSchema>;
 
 export const ClusterMemberSchema = z.object({
   receipt_id: z.string(),
+  source_receipt_id: z.string(),
+  reference: z.string(),
   counterparty: z.string().optional(),
   amount_centavos: z.number().int().optional(),
+  received_at: z.string(),
+  payment_type: z.string().nullable(),
+  customer_state: z.string().nullable(),
+  seller_locations: z.array(
+    z.object({ seller_id: z.string(), city: z.string(), state: z.string() }),
+  ),
   simulated: z.boolean().optional(),
   reason_code: z.string().nullable().optional(),
   adjustment_reason: z.string().nullable().optional(),

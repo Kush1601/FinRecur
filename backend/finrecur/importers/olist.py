@@ -51,6 +51,9 @@ class OlistImporter:
             row["customer_id"]: row
             for row in _read_csv(self.raw_dir / "olist_customers_dataset.csv")
         }
+        sellers = {
+            row["seller_id"]: row for row in _read_csv(self.raw_dir / "olist_sellers_dataset.csv")
+        }
 
         orders = [
             row
@@ -93,6 +96,15 @@ class OlistImporter:
             price_total = sum(float(i["price"]) for i in items)
             freight_total = sum(float(i["freight_value"]) for i in items)
             seller_ids = sorted({i["seller_id"] for i in items})
+            seller_locations = [
+                {
+                    "seller_id": seller_id,
+                    "city": sellers[seller_id]["seller_city"],
+                    "state": sellers[seller_id]["seller_state"],
+                }
+                for seller_id in seller_ids
+                if seller_id in sellers
+            ]
             item_prices = [from_float(float(i["price"])) for i in items]
 
             status = "cancelled" if order["order_status"] in CANCELLED_STATUSES else "open"
@@ -110,6 +122,7 @@ class OlistImporter:
                     simulated=False,
                     meta={
                         "seller_ids": seller_ids,
+                        "seller_locations": seller_locations,
                         "order_status": order["order_status"],
                         "customer_state": customer["customer_state"],
                         "item_prices": item_prices,
@@ -129,6 +142,8 @@ class OlistImporter:
                     "payment_type": payment["payment_type"],
                     "payment_sequential": int(payment["payment_sequential"]),
                     "payment_installments": int(payment["payment_installments"]),
+                    "customer_state": customer["customer_state"],
+                    "seller_locations": seller_locations,
                 }
                 if approved_at:
                     received_at = _parse_ts(approved_at)

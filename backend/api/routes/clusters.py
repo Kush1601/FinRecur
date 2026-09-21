@@ -45,8 +45,14 @@ class ClusterOut(BaseModel):
 
 class ClusterMemberOut(BaseModel):
     receipt_id: str
+    source_receipt_id: str
+    reference: str
     counterparty: str | None
     amount_centavos: int
+    received_at: str
+    payment_type: str | None
+    customer_state: str | None
+    seller_locations: list[dict[str, str]]
     simulated: bool
     reason_code: str | None
     adjustment_reason: str | None
@@ -111,10 +117,34 @@ def _detail(db: Session, cluster: Cluster) -> ClusterDetail:
     members = [
         ClusterMemberOut(
             receipt_id=receipt_id,
+            source_receipt_id=str(
+                receipts[receipt_id].meta.get("source_id", receipts[receipt_id].id)
+            )
+            if receipt_id in receipts
+            else receipt_id,
+            reference=(
+                receipts[receipt_id].original_reference
+                or receipts[receipt_id].reference
+                or str(receipts[receipt_id].meta.get("source_id", receipts[receipt_id].id))
+            )
+            if receipt_id in receipts
+            else str(feature.get("receipt_reference", "")),
             counterparty=counterparty_names.get(str(receipts[receipt_id].counterparty_id))
             if receipt_id in receipts
             else feature.get("counterparty_norm"),
             amount_centavos=int(feature.get("receipt_amount", 0)),
+            received_at=receipts[receipt_id].received_at.isoformat()
+            if receipt_id in receipts
+            else str(feature.get("receipt_date", "")),
+            payment_type=receipts[receipt_id].meta.get("payment_type")
+            if receipt_id in receipts
+            else feature.get("payment_type"),
+            customer_state=receipts[receipt_id].meta.get("customer_state")
+            if receipt_id in receipts
+            else feature.get("customer_state"),
+            seller_locations=receipts[receipt_id].meta.get("seller_locations", [])
+            if receipt_id in receipts
+            else [],
             simulated=receipts[receipt_id].simulated if receipt_id in receipts else False,
             reason_code=feature.get("reason_code"),
             adjustment_reason=feature.get("adjustment_reason"),

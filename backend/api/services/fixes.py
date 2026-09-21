@@ -275,7 +275,10 @@ class DryRunOutcome:
 
 
 def run_dry_run(session: Session, fix_id: str) -> DryRunOutcome:
-    fix = session.get(Fix, fix_id)
+    # A dry run is a state transition, and clients can legitimately retry it
+    # (React Strict Mode does this during development). Lock the fix row so two
+    # concurrent requests cannot create duplicate previews or audit events.
+    fix = session.scalar(select(Fix).where(Fix.id == fix_id).with_for_update())
     if fix is None:
         raise FixesError(f"fix {fix_id} not found")
     # A read/refresh of an already-approved fix must never revoke its approval.
@@ -296,6 +299,22 @@ def run_dry_run(session: Session, fix_id: str) -> DryRunOutcome:
     assert run is not None
     state = _load_state(session, run)
     now = datetime.now(UTC)
+
+    # Reuse an unchanged preview. This keeps the append-only ledger meaningful:
+    # identical refreshes are reads, while changed balances still produce a new
+    # dry run and snapshot for approval.
+    if fix.status == FixStatus.DRY_RUN:
+        current_hash = compute_snapshot_hash(
+            _snapshot_input(state, _affected_receivable_ids(cluster, fix)), state.policy
+        )
+        if current_hash == fix.snapshot_hash:
+            latest = session.scalars(
+                select(DryRunModel)
+                .where(DryRunModel.fix_id == fix.id, DryRunModel.fix_version == fix.version)
+                .order_by(DryRunModel.created_at.desc())
+            ).first()
+            if latest is not None:
+                return DryRunOutcome(fix=fix, dry_run=latest)
 
     validation = engine.validate(fix.type.value, fix.params, _rows_from_state(state))
     if isinstance(validation, Err):

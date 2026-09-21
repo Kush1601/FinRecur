@@ -4,7 +4,7 @@ no network -- validates ids/amounts/before-values against a ProposeContext."""
 import pytest
 
 from finrecur.claude import cache as cache_module
-from finrecur.fixes.propose import ProposeContext, propose
+from finrecur.fixes.propose import ProposeContext, _policy_lines, propose
 
 
 @pytest.fixture(autouse=True)
@@ -33,6 +33,13 @@ CONTEXT = ProposeContext(
 
 def test_propose_returns_none_without_client_or_cache():
     assert propose("cause", ["m1"], FEATURES, CONTEXT, client=None) is None
+
+
+def test_policy_provenance_is_not_sent_to_the_model_or_cache_key():
+    lines = _policy_lines(
+        {"R2": {"kind": "window_days", "window_days": 30, "source": "internal note"}}
+    )
+    assert lines == ["R2.kind: 'window_days'", "R2.window_days: 30"]
 
 
 def test_propose_accepts_a_valid_f5_fee_deduction():

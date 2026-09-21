@@ -56,9 +56,12 @@ real authentication, encryption at rest, and signed audit logs.
 ### Review workspace
 
 Every cluster keeps its source transactions beside the proposed change. Simulated rows are visibly
-labelled, money uses tabular figures, widening changes require a second approver, and Apply remains
-disabled until the required approval state is present. The Activity screen provides the append-only
-ledger and Day 2 recurrence samples; Policy shows the active rules and version history.
+labelled, and the review queue leads with shortened order/payment references, anonymised customers,
+payment method, and seller-to-customer geography. Internal UUIDs and raw payloads remain available
+inside expandable technical records instead of dominating the decision view. Money uses tabular
+figures, widening changes require a second approver, and Apply remains disabled until the required
+approval state is present. The Activity screen provides a plain-language view over the append-only
+ledger plus Day 2 recurrence samples; Policy shows readable rules and version history.
 
 ## The LLM boundary
 
@@ -131,8 +134,8 @@ make e2e        # reseed, start API/web through Playwright, exercise Day 1 → f
 
 Current verification baseline:
 
-- 183 backend tests passing.
-- 6 frontend tests passing.
+- 185 backend tests passing.
+- 11 frontend tests passing.
 - Production Next.js build passing.
 - Full Playwright workflow passing: Day 1 → alias approval → verified apply → Day 2 recurrence.
 - Evaluation gate passing with zero invariant failures.

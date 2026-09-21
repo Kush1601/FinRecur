@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from api.db import get_db
 from api.models import (
     ClusterMember,
+    Counterparty,
     Decision,
     ExceptionRecord,
     ExceptionStatus,
@@ -21,6 +22,14 @@ class ExceptionOut(BaseModel):
     id: str
     decision_id: str
     receipt_id: str
+    source_receipt_id: str
+    reference: str
+    counterparty: str
+    amount_centavos: int
+    received_at: str
+    payment_type: str | None
+    customer_state: str | None
+    seller_locations: list[dict[str, str]]
     simulated: bool
     reason_code: str
     evidence: dict
@@ -34,6 +43,37 @@ class ExceptionOut(BaseModel):
 class Page(BaseModel):
     items: list[ExceptionOut]
     total: int
+
+
+def _exception_out(
+    record: ExceptionRecord,
+    decision: Decision,
+    receipt: Receipt,
+    counterparty: Counterparty,
+    policy_version: int,
+) -> ExceptionOut:
+    source_receipt_id = str(receipt.meta.get("source_id", receipt.id))
+    return ExceptionOut(
+        id=str(record.id),
+        decision_id=str(record.decision_id),
+        receipt_id=str(receipt.id),
+        source_receipt_id=source_receipt_id,
+        reference=receipt.original_reference or receipt.reference or source_receipt_id,
+        counterparty=counterparty.name,
+        amount_centavos=receipt.amount,
+        received_at=receipt.received_at.isoformat(),
+        payment_type=receipt.meta.get("payment_type"),
+        customer_state=receipt.meta.get("customer_state"),
+        seller_locations=receipt.meta.get("seller_locations", []),
+        simulated=receipt.simulated,
+        reason_code=record.reason_code.value,
+        evidence=record.evidence,
+        status=record.status.value,
+        resolved_by=record.resolved_by,
+        resolution=record.resolution,
+        policy_version=policy_version,
+        created_at=record.created_at.isoformat(),
+    )
 
 
 @router.get("/exceptions", response_model=Page)
@@ -74,6 +114,13 @@ def list_exceptions(
             )
         ).all()
     }
+    counterparty_ids = {receipt.counterparty_id for receipt in receipts.values()}
+    counterparties = {
+        row.id: row
+        for row in db.scalars(
+            select(Counterparty).where(Counterparty.id.in_(counterparty_ids))
+        ).all()
+    }
     policy_ids = {row.policy_version_id for row in decisions.values()}
     policies = {
         row.id: row.version
@@ -81,18 +128,12 @@ def list_exceptions(
     }
     return Page(
         items=[
-            ExceptionOut(
-                id=str(r.id),
-                decision_id=str(r.decision_id),
-                receipt_id=str(decisions[r.decision_id].receipt_id),
-                simulated=receipts[decisions[r.decision_id].receipt_id].simulated,
-                reason_code=r.reason_code.value,
-                evidence=r.evidence,
-                status=r.status.value,
-                resolved_by=r.resolved_by,
-                resolution=r.resolution,
-                policy_version=policies[decisions[r.decision_id].policy_version_id],
-                created_at=r.created_at.isoformat(),
+            _exception_out(
+                r,
+                decisions[r.decision_id],
+                receipts[decisions[r.decision_id].receipt_id],
+                counterparties[receipts[decisions[r.decision_id].receipt_id].counterparty_id],
+                policies[decisions[r.decision_id].policy_version_id],
             )
             for r in rows
         ],
@@ -123,16 +164,6 @@ def resolve_exception_route(
     assert policy is not None
     receipt = db.get(Receipt, decision.receipt_id)
     assert receipt is not None
-    return ExceptionOut(
-        id=str(row.id),
-        decision_id=str(row.decision_id),
-        receipt_id=str(decision.receipt_id),
-        simulated=receipt.simulated,
-        reason_code=row.reason_code.value,
-        evidence=row.evidence,
-        status=row.status.value,
-        resolved_by=row.resolved_by,
-        resolution=row.resolution,
-        policy_version=policy.version,
-        created_at=row.created_at.isoformat(),
-    )
+    counterparty = db.get(Counterparty, receipt.counterparty_id)
+    assert counterparty is not None
+    return _exception_out(row, decision, receipt, counterparty, policy.version)

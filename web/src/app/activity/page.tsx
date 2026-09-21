@@ -3,6 +3,13 @@
 import { useEffect, useState } from "react";
 import { listLedger, listRecurrence, type LedgerEvent, type RecurrenceEntry } from "@/lib/api";
 import NotAvailable from "@/components/NotAvailable";
+import {
+  describeLedgerEvent,
+  formatActor,
+  formatDateTime,
+  humanizeCode,
+  shortReference,
+} from "@/lib/presentation";
 
 type Tab = "ledger" | "recurrence";
 
@@ -76,42 +83,12 @@ export default function ActivityPage() {
           </div>
           {ledgerError && <NotAvailable label={`Could not load ledger: ${ledgerError}`} />}
           {ledger && (
-            <table style={{ tableLayout: "fixed", width: "100%" }}>
-              <colgroup>
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "12%" }} />
-                <col style={{ width: "20%" }} />
-                <col style={{ width: "43%" }} />
-                <col style={{ width: "15%" }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>Actor</th>
-                  <th>Action</th>
-                  <th>Entity</th>
-                  <th>Before → after</th>
-                  <th>When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ledger.map((e) => (
-                  <tr key={e.id}>
-                    <td className="mono">{e.actor}</td>
-                    <td>{e.action}</td>
-                    <td className="mono" style={{ overflowWrap: "anywhere" }}>
-                      {e.entity_type}/{e.entity_id}
-                    </td>
-                    <td
-                      className="mono text-[12px]"
-                      style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}
-                    >
-                      {JSON.stringify(e.before)} → {JSON.stringify(e.after)}
-                    </td>
-                    <td className="mono" style={{ overflowWrap: "anywhere" }}>{e.created_at}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="activity-feed">
+              {ledger.length === 0 && <p style={{ color: "var(--ink-dim)" }}>No events match these filters.</p>}
+              {ledger.map((event) => (
+                <LedgerCard key={event.id} event={event} />
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -122,26 +99,64 @@ export default function ActivityPage() {
           {recurrence &&
             recurrence.map((r) => (
               <div key={r.fix_id} className="card p-3">
-                <div className="font-medium">{r.summary}</div>
-                <div className="mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
-                  {r.condition}
+                <div className="flex items-center gap-2">
+                  <span className="tag tag-readable">{humanizeCode(r.fix_type)}</span>
+                  <div className="font-medium">{r.summary}</div>
                 </div>
-                <div className="flex gap-3 mt-2">
+                <div className="recurrence-samples">
                   {r.samples.map((s) => (
-                    <div key={s.run_id} className="flex flex-col items-center text-[11px]">
+                    <div key={s.run_id} className="recurrence-sample">
                       <div className="flex items-end gap-[2px]" style={{ height: 40 }}>
                         <Bar value={s.auto_handled} max={s.appeared} color="var(--accent-settled)" />
                         <Bar value={s.needed_human} max={s.appeared} color="var(--accent-escalated)" />
                       </div>
-                      <div className="mono">{s.batch_label}</div>
+                      <div>
+                        <strong className="mono">{s.batch_label}</strong>
+                        <div>{s.appeared} appeared</div>
+                        <div>{s.auto_handled} automatic · {s.needed_human} human</div>
+                      </div>
                     </div>
                   ))}
                 </div>
+                <details className="mt-2">
+                  <summary style={{ cursor: "pointer", color: "var(--ink-dim)" }}>Technical recurrence condition</summary>
+                  <code className="mono text-[12px]">{r.condition}</code>
+                </details>
               </div>
             ))}
         </div>
       )}
     </div>
+  );
+}
+
+function LedgerCard({ event }: { event: LedgerEvent }) {
+  const narrative = describeLedgerEvent(event);
+  return (
+    <article className="card ledger-card">
+      <div className="ledger-marker" aria-hidden="true" />
+      <div className="ledger-content">
+        <div className="ledger-heading">
+          <div>
+            <h2>{narrative.title}</h2>
+            <p>{narrative.summary}</p>
+          </div>
+          <time dateTime={event.created_at}>{formatDateTime(event.created_at)}</time>
+        </div>
+        <div className="ledger-meta">
+          <span>{formatActor(event.actor)}</span>
+          <span>{humanizeCode(event.entity_type)} {shortReference(event.entity_id)}</span>
+        </div>
+        <details>
+          <summary>Technical audit record</summary>
+          <div className="technical-record">
+            <div><span>Entity</span><code>{event.entity_type}/{event.entity_id}</code></div>
+            <div><span>Before</span><code>{JSON.stringify(event.before) ?? "None"}</code></div>
+            <div><span>After</span><code>{JSON.stringify(event.after) ?? "None"}</code></div>
+          </div>
+        </details>
+      </div>
+    </article>
   );
 }
 

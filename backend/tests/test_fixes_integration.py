@@ -20,11 +20,13 @@ from api.models import (
     AdjustmentReason,
     Cluster,
     CounterpartyAlias,
+    DryRun,
     ExceptionRecord,
     ExceptionStatus,
     Fix,
     FixStatus,
     FixType,
+    LedgerEvent,
 )
 from api.models import Allocation as AllocationModel
 from api.models import Decision as DecisionModel
@@ -89,6 +91,19 @@ def test_e_fee_deduction_end_to_end(seeded_run_id, client):
     body = dry_run.json()
     assert body["predicted"]["matched"] == 11
     assert body["predicted"]["still_failing"] == 0
+
+    repeated = client.post(f"/fixes/{fix_id}/dry-run")
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["snapshot_hash"] == body["snapshot_hash"]
+    with SessionLocal() as db:
+        previews = db.scalars(select(DryRun).where(DryRun.fix_id == fix_id)).all()
+        events = db.scalars(
+            select(LedgerEvent).where(
+                LedgerEvent.entity_id == fix_id, LedgerEvent.action == "dry_run"
+            )
+        ).all()
+        assert len(previews) == 1
+        assert len(events) == 1
 
     approved = client.post(
         f"/fixes/{fix_id}/approve", json={"role": "reviewer", "name": "Reviewer One"}

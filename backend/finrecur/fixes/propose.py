@@ -179,6 +179,8 @@ def _policy_lines(policy: dict) -> list[str]:
         if not isinstance(rule, dict):
             continue
         for key in sorted(rule):
+            if key == "source":
+                continue
             lines.append(f"{rule_id}.{key}: {rule[key]!r}")
     return lines
 
