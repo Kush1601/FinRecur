@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createRun, explainAll, groupRun, listRuns, type RunSummary } from "@/lib/api";
 import { readRole, writeRole, type Role } from "@/lib/role";
+import { emitRunUpdated, onRunUpdated } from "@/lib/runEvents";
 
 const NAV = [
   { href: "/run", label: "Runs" },
@@ -33,6 +34,9 @@ export default function HeaderNav() {
   useEffect(() => {
 // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshLatest();
+    return onRunUpdated(() => {
+      void refreshLatest();
+    });
   }, []);
 
   function commitRole(nextRole: Role, nextName: string) {
@@ -50,6 +54,7 @@ export default function HeaderNav() {
       const grouped = await groupRun(res.data.id);
       if (grouped.ok) await explainAll(res.data.id);
       setLatest(res.data);
+      emitRunUpdated();
       router.push("/run");
     }
   }

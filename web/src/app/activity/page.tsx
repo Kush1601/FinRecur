@@ -10,6 +10,7 @@ import {
   humanizeCode,
   shortReference,
 } from "@/lib/presentation";
+import { onRunUpdated } from "@/lib/runEvents";
 
 type Tab = "ledger" | "recurrence";
 
@@ -63,6 +64,14 @@ export default function ActivityPage() {
     void loadRecurrence();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actor, entityType, ledgerPage]);
+
+  useEffect(() => {
+    return onRunUpdated(() => {
+      void loadLedger();
+      void loadRecurrence();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col gap-5 page-enter">
@@ -129,6 +138,12 @@ export default function ActivityPage() {
       {tab === "recurrence" && (
         <div className="flex flex-col gap-3">
           {recurrenceError && <NotAvailable label={`Could not load recurrence: ${recurrenceError}`} />}
+          {recurrence && recurrence.length === 0 && !recurrenceError && (
+            <p style={{ color: "var(--ink-dim)" }}>
+              No fixes have been applied yet. Recurrence tracking starts once a fix is applied,
+              and shows results once a later batch has run against it.
+            </p>
+          )}
           {recurrence &&
             recurrence.map((r) => (
               <div key={r.fix_id} className="card p-3">
@@ -136,6 +151,11 @@ export default function ActivityPage() {
                   <span className="tag tag-readable">{humanizeCode(r.fix_type)}</span>
                   <div className="font-medium">{r.summary}</div>
                 </div>
+                {r.samples.length === 0 ? (
+                  <p style={{ color: "var(--ink-dim)" }}>
+                    Applied, but no later batch has run yet to check whether it held.
+                  </p>
+                ) : (
                 <div className="recurrence-samples">
                   {r.samples.map((s) => (
                     <div key={s.run_id} className="recurrence-sample">
@@ -151,6 +171,7 @@ export default function ActivityPage() {
                     </div>
                   ))}
                 </div>
+                )}
                 <details className="mt-2">
                   <summary style={{ cursor: "pointer", color: "var(--ink-dim)" }}>Technical recurrence condition</summary>
                   <code className="mono text-[12px]">{r.condition}</code>

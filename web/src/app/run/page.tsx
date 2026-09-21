@@ -17,6 +17,7 @@ import {
   type RunSummary,
 } from "@/lib/api";
 import { formatBRL } from "@/lib/format";
+import { emitRunUpdated, onRunUpdated } from "@/lib/runEvents";
 
 type Row = {
   key: string;
@@ -52,6 +53,10 @@ export default function RunPage() {
   const esRef = useRef<EventSource | null>(null);
   const startRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const phaseRef = useRef(phase);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   async function bootstrap() {
     const res = await listRuns();
@@ -83,9 +88,17 @@ export default function RunPage() {
   useEffect(() => {
 // eslint-disable-next-line react-hooks/set-state-in-effect
     void bootstrap();
+    // A run started elsewhere (the header's button, while this page is already
+    // mounted showing an older run) needs to be picked up here too -- unless
+    // we're mid-animation on a run started from this page's own button, which
+    // already ends by emitting this same event once it's genuinely done.
+    const unsubscribe = onRunUpdated(() => {
+      if (phaseRef.current !== "streaming") void bootstrap();
+    });
     return () => {
       esRef.current?.close();
       if (timerRef.current) clearInterval(timerRef.current);
+      unsubscribe();
     };
   }, []);
 
@@ -129,6 +142,7 @@ export default function RunPage() {
       await prepareReview(newRun.id);
       stopCounters();
       setPhase("done");
+      emitRunUpdated();
     });
 
     es.onerror = () => {
@@ -173,6 +187,7 @@ export default function RunPage() {
     }
     await prepareReview(run.id);
     setPhase("done");
+    emitRunUpdated();
   }
 
   async function prepareReview(runId: string) {

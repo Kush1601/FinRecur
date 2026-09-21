@@ -22,6 +22,7 @@ import {
 } from "@/lib/presentation";
 import NotAvailable from "@/components/NotAvailable";
 import { readRole } from "@/lib/role";
+import { onRunUpdated } from "@/lib/runEvents";
 
 type Tab = "clusters" | "singletons";
 
@@ -63,6 +64,9 @@ export default function ReviewPage() {
   useEffect(() => {
 // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
+    return onRunUpdated(() => {
+      void load();
+    });
   }, []);
 
   async function handleExplainAll() {
